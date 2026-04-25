@@ -99,6 +99,25 @@ class Database {
         restored BOOLEAN DEFAULT false
       );
 
+      CREATE TABLE IF NOT EXISTS group_settings (
+        group_id VARCHAR(80) PRIMARY KEY,
+        selected_game VARCHAR(20) NOT NULL DEFAULT 'paredao',
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS game_sessions (
+        id SERIAL PRIMARY KEY,
+        game_id INTEGER REFERENCES games(id) ON DELETE CASCADE,
+        group_id VARCHAR(80) NOT NULL,
+        game_type VARCHAR(20) NOT NULL,
+        phase VARCHAR(30) NOT NULL DEFAULT 'waiting',
+        state JSONB NOT NULL DEFAULT '{}'::jsonb,
+        status VARCHAR(20) NOT NULL DEFAULT 'active',
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(game_id)
+      );
+
       ALTER TABLE games ADD COLUMN IF NOT EXISTS game_type VARCHAR(20) DEFAULT 'paredao';
 
       CREATE INDEX IF NOT EXISTS idx_games_group_status ON games(group_id, status);
@@ -107,6 +126,7 @@ class Database {
       CREATE INDEX IF NOT EXISTS idx_questions_game_to_player ON questions(game_id, to_player_id);
       CREATE INDEX IF NOT EXISTS idx_questions_dm_message_id ON questions(dm_message_id);
       CREATE INDEX IF NOT EXISTS idx_players_dm_id ON players(dm_id) WHERE dm_id IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_game_sessions_group_type ON game_sessions(group_id, game_type, status);
     `;
     await this.query(sql);
   }
@@ -248,6 +268,66 @@ class Database {
     await this.query(
       'UPDATE games SET status = $1, current_player_id = $2, updated_at = NOW() WHERE id = $3',
       [status, currentPlayerId, gameId]
+    );
+  }
+
+  async getSelectedGame(groupId) {
+    const res = await this.query(
+      'SELECT selected_game FROM group_settings WHERE group_id = $1 LIMIT 1',
+      [groupId]
+    );
+    return res.rows[0]?.selected_game || 'paredao';
+  }
+
+  async setSelectedGame(groupId, gameType) {
+    await this.query(`
+      INSERT INTO group_settings(group_id, selected_game, updated_at)
+      VALUES($1, $2, NOW())
+      ON CONFLICT (group_id) DO UPDATE
+      SET selected_game = EXCLUDED.selected_game,
+          updated_at = NOW()
+    `, [groupId, gameType]);
+  }
+
+  async upsertGameSession({ gameId, groupId, gameType, phase, state, status = 'active' }) {
+    await this.query(`
+      INSERT INTO game_sessions(game_id, group_id, game_type, phase, state, status, updated_at)
+      VALUES($1, $2, $3, $4, $5::jsonb, $6, NOW())
+      ON CONFLICT (game_id) DO UPDATE
+      SET phase = EXCLUDED.phase,
+          state = EXCLUDED.state,
+          status = EXCLUDED.status,
+          updated_at = NOW()
+    `, [gameId, groupId, gameType, phase, JSON.stringify(state || {}), status]);
+  }
+
+  async getGameSessionByGameId(gameId) {
+    const res = await this.query(
+      'SELECT * FROM game_sessions WHERE game_id = $1 AND status = $2 LIMIT 1',
+      [gameId, 'active']
+    );
+    return res.rows[0] || null;
+  }
+
+  async getActiveGameSession(groupId, gameType) {
+    const res = await this.query(`
+      SELECT gs.*
+      FROM game_sessions gs
+      JOIN games g ON g.id = gs.game_id
+      WHERE gs.group_id = $1
+        AND gs.game_type = $2
+        AND gs.status = 'active'
+        AND g.status != 'finished'
+      ORDER BY gs.updated_at DESC
+      LIMIT 1
+    `, [groupId, gameType]);
+    return res.rows[0] || null;
+  }
+
+  async closeGameSession(gameId) {
+    await this.query(
+      'UPDATE game_sessions SET status = $1, updated_at = NOW() WHERE game_id = $2',
+      ['closed', gameId]
     );
   }
 

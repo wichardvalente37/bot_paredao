@@ -852,6 +852,14 @@ class GameManager {
     return await db.isAdmin(playerId);
   }
 
+  async getSelectedGame(groupId) {
+    return db.getSelectedGame(groupId);
+  }
+
+  async setSelectedGame(groupId, gameType) {
+    return db.setSelectedGame(groupId, gameType);
+  }
+
   async isSupremo(playerId) {
     const player = await db.findPlayerByAnyId(playerId);
     if (!player) return false;
@@ -903,6 +911,7 @@ class GameManager {
     }
     
     await db.updateGameStatus(gameId, 'finished', null);
+    await db.closeGameSession(gameId);
     
     this.stopTurnTimer(groupId);
     

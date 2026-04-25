@@ -9,8 +9,51 @@ class ImpostorGameManager {
     this.defaultSharesPerPlayer = 3;
   }
 
-  getState(groupId) {
-    return this.gamesByGroup.get(groupId);
+  hydrateState(raw) {
+    if (!raw) return null;
+    const state = { ...raw };
+    state.playerShares = new Map(Object.entries(raw.playerShares || {}));
+    state.votes = new Map(Object.entries(raw.votes || {}));
+    return state;
+  }
+
+  serializeState(state) {
+    return {
+      ...state,
+      playerShares: Object.fromEntries(state.playerShares || []),
+      votes: Object.fromEntries(state.votes || [])
+    };
+  }
+
+  async getState(groupId, gameId = null) {
+    const cached = this.gamesByGroup.get(groupId);
+    if (cached && (!gameId || cached.gameId === gameId)) {
+      return cached;
+    }
+
+    const session = gameId
+      ? await this.db.getGameSessionByGameId(gameId)
+      : await this.db.getActiveGameSession(groupId, 'impostor');
+    if (!session) return null;
+
+    const hydrated = this.hydrateState(session.state || {});
+    hydrated.gameId = session.game_id;
+    this.gamesByGroup.set(groupId, hydrated);
+    return hydrated;
+  }
+
+  async persistState(groupId, state, phase = null) {
+    const finalPhase = phase || state.phase || 'waiting';
+    state.phase = finalPhase;
+    this.gamesByGroup.set(groupId, state);
+    await this.db.upsertGameSession({
+      gameId: state.gameId,
+      groupId,
+      gameType: 'impostor',
+      phase: finalPhase,
+      state: this.serializeState(state),
+      status: 'active'
+    });
   }
 
   clearState(groupId) {
@@ -23,35 +66,23 @@ class ImpostorGameManager {
       throw new Error('Valor inválido. Use de 1 a 10 partilhas por jogador.');
     }
 
-    const state = this.getState(groupId);
-    if (state && state.phase !== 'waiting') {
+    const state = await this.getState(groupId);
+    if (!state) {
+      throw new Error('Inicie primeiro com !iniciarimpostor.');
+    }
+
+    if (state.phase !== 'waiting') {
       throw new Error('Só é possível ajustar partilhas antes de encerrar inscrições.');
     }
 
-    if (state) {
-      state.sharesPerPlayer = shares;
-      return shares;
-    }
-
-    this.gamesByGroup.set(groupId, {
-      phase: 'waiting',
-      sharesPerPlayer: shares,
-      players: [],
-      gameId: null,
-      currentTurnIndex: 0,
-      playerShares: new Map(),
-      votes: new Map(),
-      impostorIds: [],
-      secretWord: null,
-      shareLog: []
-    });
-
+    state.sharesPerPlayer = shares;
+    await this.persistState(groupId, state, 'waiting');
     return shares;
   }
 
   async createGame(groupId) {
     const gameId = await this.manager.createGame(groupId, 'impostor');
-    this.gamesByGroup.set(groupId, {
+    const state = {
       phase: 'waiting',
       sharesPerPlayer: this.defaultSharesPerPlayer,
       players: [],
@@ -62,13 +93,14 @@ class ImpostorGameManager {
       impostorIds: [],
       secretWord: null,
       shareLog: []
-    });
+    };
+    await this.persistState(groupId, state, 'waiting');
 
     return gameId;
   }
 
   async closeEntriesAndStart({ groupId, chat }) {
-    const state = this.getState(groupId);
+    const state = await this.getState(groupId);
     if (!state || !state.gameId) throw new Error('Nenhum jogo do impostor criado.');
     if (state.phase !== 'waiting') throw new Error('As inscrições já foram encerradas.');
 
@@ -88,6 +120,7 @@ class ImpostorGameManager {
     state.shareLog = [];
 
     await this.db.updateGameStatus(state.gameId, 'active', players[0].id);
+    await this.persistState(groupId, state, 'sharing');
 
     await this.sendRoles(players, state.secretWord, state.impostorIds);
 
@@ -144,7 +177,7 @@ class ImpostorGameManager {
   }
 
   async handleShare({ groupId, senderId, text, chat }) {
-    const state = this.getState(groupId);
+    const state = await this.getState(groupId);
     if (!state || state.phase !== 'sharing') {
       throw new Error('Não há rodada de partilhas ativa.');
     }
@@ -166,6 +199,7 @@ class ImpostorGameManager {
     const shareNumber = used + 1;
     state.playerShares.set(senderId, shareNumber);
     state.shareLog.push({ playerId: senderId, text: clean, shareNumber });
+    await this.persistState(groupId, state, 'sharing');
 
     await chat.sendMessage(`💬 *${current.name}* (${shareNumber}/${state.sharesPerPlayer}): ${clean}`);
 
@@ -180,12 +214,14 @@ class ImpostorGameManager {
     if (state.currentTurnIndex < state.players.length) {
       const next = state.players[state.currentTurnIndex];
       await this.db.updateGameStatus(state.gameId, 'active', next.id);
+      await this.persistState(groupId, state, 'sharing');
       await chat.sendMessage(`🎤 Vez de *${next.name}*. Use !fala ...`);
       return { phase: state.phase };
     }
 
     state.phase = 'voting';
     await this.db.updateGameStatus(state.gameId, 'active', null);
+    await this.persistState(groupId, state, 'voting');
 
     await chat.sendMessage(
       `🗳️ *Rodada de partilhas encerrada!*
@@ -202,7 +238,7 @@ class ImpostorGameManager {
   }
 
   async handleVote({ groupId, senderId, targetId }) {
-    const state = this.getState(groupId);
+    const state = await this.getState(groupId);
     if (!state || state.phase !== 'voting') {
       throw new Error('A votação não está ativa.');
     }
@@ -218,6 +254,7 @@ class ImpostorGameManager {
     if (state.votes.has(senderId)) throw new Error('Você já votou.');
 
     state.votes.set(senderId, targetId);
+    await this.persistState(groupId, state, 'voting');
 
     return {
       totalVotes: state.votes.size,
@@ -228,7 +265,7 @@ class ImpostorGameManager {
   }
 
   async forceCloseVoting({ groupId, chat }) {
-    const state = this.getState(groupId);
+    const state = await this.getState(groupId);
     if (!state || state.phase !== 'voting') throw new Error('Nenhuma votação ativa.');
 
     const tally = new Map();
@@ -264,6 +301,7 @@ class ImpostorGameManager {
 
     await chat.sendMessage(report);
     await this.db.updateGameStatus(state.gameId, 'finished', null);
+    await this.db.closeGameSession(state.gameId);
 
     this.clearState(groupId);
   }
