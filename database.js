@@ -150,6 +150,10 @@ class Database {
   }
 
   async registerPlayerWithManualInfo(groupUserId, dmUserId, name, isSupremo = false) {
+    if (!groupUserId || !dmUserId || !name?.trim()) {
+      throw new Error('Dados incompletos do jogador. Obrigatório: número do grupo, número do DM e nome.');
+    }
+
     await this.query(`
       INSERT INTO players(id, dm_id, name, is_supremo) 
       VALUES($1, $2, $3, $4)
@@ -160,6 +164,58 @@ class Database {
     `, [groupUserId, dmUserId, name, isSupremo]);
     
     console.log(`👤 Registrado: ${name} (${groupUserId} ↔ ${dmUserId})`);
+  }
+
+  async getPlayerRegistrationProfile(userId) {
+    const player = await this.findPlayerByAnyId(userId);
+    if (!player) return null;
+
+    const res = await this.query(`
+      SELECT id, dm_id, name, is_admin, is_supremo, created_at
+      FROM players
+      WHERE id = $1
+      LIMIT 1
+    `, [player.id]);
+
+    return res.rows[0] || null;
+  }
+
+  async isPlayerFullyRegistered(userId) {
+    const profile = await this.getPlayerRegistrationProfile(userId);
+    if (!profile) return false;
+    return Boolean(profile.id && profile.dm_id && profile.name);
+  }
+
+  async getPlayerHistory(userId, limit = 10) {
+    const player = await this.findPlayerByAnyId(userId);
+    if (!player) return [];
+
+    const res = await this.query(`
+      SELECT 
+        g.id AS game_id,
+        g.group_id,
+        g.game_type,
+        g.status,
+        gp.turn_order,
+        gp.joined_at,
+        COALESCE(t.questions_received, 0) AS questions_received,
+        COALESCE(t.questions_answered, 0) AS questions_answered,
+        t.duration_minutes
+      FROM game_players gp
+      JOIN games g ON g.id = gp.game_id
+      LEFT JOIN LATERAL (
+        SELECT tt.questions_received, tt.questions_answered, tt.duration_minutes
+        FROM turns tt
+        WHERE tt.game_id = gp.game_id AND tt.player_id = gp.player_id
+        ORDER BY tt.id DESC
+        LIMIT 1
+      ) t ON true
+      WHERE gp.player_id = $1
+      ORDER BY gp.joined_at DESC
+      LIMIT $2
+    `, [player.id, limit]);
+
+    return res.rows;
   }
 
   async getGamePlayers(gameId) {

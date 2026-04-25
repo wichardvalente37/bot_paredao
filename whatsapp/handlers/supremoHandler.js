@@ -96,6 +96,11 @@ class SupremoHandler {
       return true;
     }
 
+    if (command === '!saudar') {
+      await this.supremoCommands.greetRoyal(chat, senderId);
+      return true;
+    }
+
     if (command === '!voteban') {
       if (mentionedIds.length > 0) {
         await this.supremoCommands.fakeVoteBan(chat, senderId, mentionedIds[0]);

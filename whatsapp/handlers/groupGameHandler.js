@@ -29,6 +29,50 @@ class GroupGameHandler {
     this.selectedGameByGroup.set(groupId, gameName);
   }
 
+  async sendUserRegistrationStatus(msg, targetId, isSelf = false) {
+    const profile = await this.db.getPlayerRegistrationProfile(targetId);
+    if (!profile) {
+      const guidance = isSelf
+        ? '\n\n💡 Para se cadastrar: *!entrar NUMERO NOME*\nEx: !entrar 258866630883 João'
+        : '';
+      await msg.reply(`❌ ${isSelf ? 'Você não está' : 'Usuário não está'} cadastrado(a) no sistema geral.${guidance}`);
+      return;
+    }
+
+    const fullyRegistered = Boolean(profile.id && profile.dm_id && profile.name);
+    const status = fullyRegistered ? '✅ Cadastrado(a)' : '⚠️ Cadastro incompleto';
+    const dmNumber = profile.dm_id ? profile.dm_id.split('@')[0] : 'não informado';
+    const groupNumber = profile.id ? profile.id.split('@')[0] : 'não informado';
+
+    await msg.reply(
+      `👤 *STATUS DO USER*\n\n` +
+      `📌 Estado: ${status}\n` +
+      `🧾 Nome: ${profile.name || 'não informado'}\n` +
+      `👥 Número do grupo: ${groupNumber}\n` +
+      `💬 Número do DM: ${dmNumber}\n` +
+      `🛡️ Admin: ${profile.is_admin ? 'sim' : 'não'}\n` +
+      `👑 Supremo: ${profile.is_supremo ? 'sim' : 'não'}`
+    );
+  }
+
+  async sendUserHistory(msg, targetId) {
+    const history = await this.db.getPlayerHistory(targetId, 8);
+    if (history.length === 0) {
+      await msg.reply('📭 Sem histórico de jogos para este usuário.');
+      return;
+    }
+
+    const lines = history.map((entry, idx) => (
+      `${idx + 1}. #${entry.game_id} (${(entry.game_type || 'paredao').toUpperCase()})\n` +
+      `   • status: ${entry.status}\n` +
+      `   • posição: ${entry.turn_order ?? '-'}\n` +
+      `   • perguntas: ${entry.questions_received}/${entry.questions_answered} resp.\n` +
+      `   • duração turno: ${entry.duration_minutes ?? 0} min`
+    ));
+
+    await msg.reply(`📚 *HISTÓRICO RECENTE*\n\n${lines.join('\n')}`);
+  }
+
   async mentionAllGroupMembers(chat, excludeIds = []) {
     try {
       const participants = chat.participants || [];
@@ -91,7 +135,7 @@ class GroupGameHandler {
         `🕵️ *JOGO DO IMPOSTOR #${gameId} CRIADO!*
 
 ` +
-        `📝 Entrada: *!entrar NUMERO NOME*
+        `📝 Entrada: *!entrar* (se já cadastrado) ou *!entrar NUMERO NOME*
 ` +
         `⚙️ Partilhas padrão: 3 por pessoa (mude com !partilhas N)
 ` +
@@ -231,7 +275,9 @@ class GroupGameHandler {
         `🎮 *GERAL*\n` +
         `!menujogos - Lista de jogos\n` +
         `!selecionarjogo [paredao|impostor] - Selecionar fluxo\n` +
-        `!entrar NUMERO NOME - Entrar no jogo atual\n` +
+        `!entrar [NUMERO NOME] - Entrar no jogo atual\n` +
+        `!user [@membro] - Ver cadastro geral\n` +
+        `!userhis [@membro] - Ver histórico de jogos\n` +
         `!sair - Sair do jogo atual\n` +
         `!status - Status detalhado\n\n` +
         `🎤 *PAREDÃO*\n` +
@@ -267,6 +313,20 @@ class GroupGameHandler {
     const handledImpostor = await this.handleImpostorFlow({ msg, chat, senderId, command, args, isAdmin, isSupremo });
     if (handledImpostor) return true;
 
+    if (command === '!user') {
+      const mentionedIds = await getMentionedIds(msg);
+      const targetId = mentionedIds[0] || senderId;
+      await this.sendUserRegistrationStatus(msg, targetId, targetId === senderId);
+      return true;
+    }
+
+    if (command === '!userhis' || command === '!historico') {
+      const mentionedIds = await getMentionedIds(msg);
+      const targetId = mentionedIds[0] || senderId;
+      await this.sendUserHistory(msg, targetId);
+      return true;
+    }
+
     if (command === '!entrar') {
       const game = await this.manager.getActiveGame(groupId, selectedGame);
       if (!game) return msg.reply(`❌ Não há ${selectedGame} pronto. Use o comando de iniciar.`).then(() => true);
@@ -280,12 +340,23 @@ class GroupGameHandler {
           return true;
         }
 
-        if (args.length < 2) {
-          await msg.reply('❌ Formato: !entrar NUMERO NOME\nEx: !entrar 258866630883 João');
-          return true;
-        }
+        let playerInfo;
+        if (args.length === 0) {
+          const isFullyRegistered = await this.db.isPlayerFullyRegistered(senderId);
+          if (!isFullyRegistered) {
+            await msg.reply('❌ Você não tem cadastro geral completo.\nUse: !entrar NUMERO NOME\nEx: !entrar 258866630883 João');
+            return true;
+          }
 
-        const playerInfo = await this.manager.registerPlayer(game.id, senderId, args[0], args.slice(1).join(' '));
+          playerInfo = await this.manager.registerExistingPlayer(game.id, senderId);
+        } else {
+          if (args.length < 2) {
+            await msg.reply('❌ Formato: !entrar NUMERO NOME\nEx: !entrar 258866630883 João');
+            return true;
+          }
+
+          playerInfo = await this.manager.registerPlayer(game.id, senderId, args[0], args.slice(1).join(' '));
+        }
         const dmId = playerInfo.dmId || senderId;
         const dmChat = await this.client.getChatById(dmId).catch(() => null);
         if (dmChat) {
@@ -364,7 +435,7 @@ class GroupGameHandler {
       if (mentionIds.length > 0) {
         announcement += `🎯 *CONVITE PARA TODOS:*\n${mentionIds.map((id) => `@${id.split('@')[0]}`).join(' ')}\n\n`;
       }
-      announcement += `📝 *PARA PARTICIPAR:*\n!entrar NUMERO SEU_NOME\nEx: !entrar 258866630883 João`;
+      announcement += `📝 *PARA PARTICIPAR:*\n!entrar (se já cadastrado)\nou\n!entrar NUMERO SEU_NOME\nEx: !entrar 258866630883 João`;
       await chat.sendMessage(announcement, mentionIds.length > 0 ? { mentions: mentionIds } : undefined);
       await msg.reply(`✅ Paredão #${gameId} iniciado!`);
       return true;
@@ -427,9 +498,13 @@ class GroupGameHandler {
       if (!game && (command === '!forcarentrar' || command === '!remover')) return msg.reply('❌ Nenhum jogo ativo').then(() => true);
 
       if (command === '!forcarentrar') {
-        const name = await this.getSafeName(targetId);
-        const playerInfo = await this.manager.forceAddPlayer(game.id, targetId, name);
-        await msg.reply(`✅ ${playerInfo.name} adicionado! Posição: ${playerInfo.order}º`);
+        try {
+          const name = await this.getSafeName(targetId);
+          const playerInfo = await this.manager.forceAddPlayer(game.id, targetId, name);
+          await msg.reply(`✅ ${playerInfo.name} adicionado! Posição: ${playerInfo.order}º`);
+        } catch (error) {
+          await msg.reply(`❌ ${error.message}`);
+        }
         return true;
       }
 

@@ -93,18 +93,41 @@ class GameManager {
     };
   }
 
+  async registerExistingPlayer(gameId, groupUserId) {
+    const player = await db.findPlayerByGroupId(groupUserId);
+    if (!player) {
+      throw new Error('Você não está cadastrado no sistema geral. Use: !entrar NUMERO NOME');
+    }
+
+    if (!player.dm_id || !player.name) {
+      throw new Error('Seu cadastro está incompleto. Precisamos de número do grupo + número do DM + nome. Use: !entrar NUMERO NOME');
+    }
+
+    const players = await db.getGamePlayers(gameId);
+    const nextOrder = players.length + 1;
+    await db.addPlayerToGame(gameId, groupUserId, nextOrder);
+
+    console.log(`👤 ${player.name} reutilizou cadastro global! Ordem: ${nextOrder}`);
+
+    return {
+      playerId: groupUserId,
+      dmId: player.dm_id,
+      name: player.name,
+      order: nextOrder
+    };
+  }
+
   async forceAddPlayer(gameId, groupUserId, name = 'Jogador') {
-    await db.query(`
-      INSERT INTO players(id, name) 
-      VALUES($1, $2)
-      ON CONFLICT (id) DO UPDATE SET name = $2
-    `, [groupUserId, name]);
+    const existing = await db.findPlayerByGroupId(groupUserId);
+    if (!existing || !existing.dm_id || !existing.name) {
+      throw new Error('Jogador sem cadastro completo (grupo + DM + nome). Peça para usar !entrar NUMERO NOME primeiro.');
+    }
     
     const players = await db.getGamePlayers(gameId);
     const nextOrder = players.length + 1;
     await db.addPlayerToGame(gameId, groupUserId, nextOrder);
     
-    return { playerId: groupUserId, name, order: nextOrder };
+    return { playerId: groupUserId, name: existing.name || name, order: nextOrder };
   }
 
   async removePlayer(gameId, playerId) {

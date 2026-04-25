@@ -52,6 +52,7 @@ class SupremoCommands {
       `!pegadinha @membro - Pegadinha do Supremo\n` +
       `!fakeerror - Simular erro do sistema\n` +
       `!announce - Anúncio dramático\n` +
+      `!saudar - Saudação imperial do grupo\n` +
       `!voteban @membro - Falsa votação para ban\n\n` +
       `📊 *COMANDOS ÚTEIS:*\n` +
       `!listasubordinados - Listar todos no grupo\n` +
@@ -60,6 +61,31 @@ class SupremoCommands {
       `⚠️ *AVISO:* Com grande poder vem grande possibilidade de trollagem!`;
     
     await chat.sendMessage(helpText);
+  }
+
+  async greetRoyal(chat, senderId) {
+    const isSupremo = await this.isSupremo(senderId);
+    if (!isSupremo) {
+      await chat.sendMessage('❌ Apenas o SUPREMO pode iniciar a saudação imperial.');
+      return;
+    }
+
+    const participants = chat.participants || [];
+    const mentionIds = participants
+      .map((p) => p.id?._serialized)
+      .filter((id) => id && !id.includes('@bot'));
+
+    const mentionText = mentionIds.length
+      ? mentionIds.map((id) => `@${id.split('@')[0]}`).join(' ')
+      : 'pessoal';
+
+    await chat.sendMessage(
+      `👑 *SAUDAÇÃO IMPERIAL* 👑\n\n` +
+      `Salve, ${mentionText}!\n` +
+      `O SUPREMO deseja um dia lendário para todos.\n` +
+      `⚡ Disciplina, diversão e respeito no grupo!`,
+      mentionIds.length ? { mentions: mentionIds } : undefined
+    );
   }
 
   // Comando de ban com contagem regressiva
