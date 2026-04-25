@@ -1,6 +1,6 @@
 const DMHandler = require('../whatsapp/handlers/dmHandler');
 const GroupGameHandler = require('../whatsapp/handlers/groupGameHandler');
-const ImpostorGameManager = require('../game/impostorGameManager');
+const ImpostorGameManager = require('../games/impostor/ImpostorGameManager');
 const SupremoHandler = require('../whatsapp/handlers/supremoHandler');
 const { normalizeText } = require('../whatsapp/helpers/messageUtils');
 
@@ -24,7 +24,7 @@ class BotApplication {
       this.isReady = true;
       this.reconnectAttempts = 0;
       console.log('====================================');
-      console.log('🤖 BOT DO PAREDÃO PRONTO PARA AÇÃO!');
+      console.log('🤖 BOT MAESTRO PRONTO PARA AÇÃO!');
       console.log('====================================');
     });
 

@@ -3,7 +3,7 @@ require('dotenv').config();
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const Database = require('./database');
-const GameManager = require('./game-manager');
+const GameManager = require('./games/paredao/ParedaoGameManager');
 const SupremoCommands = require('./supremo-commands');
 const http = require('http');
 const fs = require('fs');
@@ -51,7 +51,7 @@ function createClient() {
 
   return new Client({
     authStrategy: new LocalAuth({
-      clientId: 'paredao-bot',
+      clientId: 'maestro-bot',
       dataPath: './.wwebjs_auth',
     }),
     puppeteer: {
@@ -104,7 +104,7 @@ async function bootstrap() {
   await db.connect();
 
   console.log('====================================');
-  console.log('🤖 INICIANDO BOT DO PAREDÃO...');
+  console.log('🤖 INICIANDO BOT MAESTRO...');
   console.log('====================================');
 
   app.setupEvents();

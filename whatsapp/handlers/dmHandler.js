@@ -18,7 +18,7 @@ class DMHandler {
       `);
 
       if (activeGame.rows.length === 0) {
-        await msg.reply('❌ Nenhum paredão ativo.');
+        await msg.reply('❌ Nenhum jogo ativo no momento.');
         return true;
       }
 
@@ -104,7 +104,7 @@ class DMHandler {
         await msg.reply(result.error);
       }
     } else {
-      await msg.reply('❌ Nenhum paredão ativo.');
+      await msg.reply('❌ Nenhum jogo ativo no momento.');
     }
 
     return true;

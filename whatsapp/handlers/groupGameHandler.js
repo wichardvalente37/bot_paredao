@@ -1,4 +1,6 @@
 const { getMentionedIds } = require('../helpers/messageUtils');
+const { listGames, isSupportedGame } = require('../../games/core/gameRegistry');
+const { parseTurnSettings } = require('../../games/paredao/constants');
 
 class GroupGameHandler {
   constructor({ client, db, manager, impostorManager }) {
@@ -258,10 +260,10 @@ class GroupGameHandler {
     }
 
     if (command === '!menujogos') {
+      const games = listGames();
       await msg.reply(
         `🎮 *MENU DE JOGOS*\n\n` +
-        `• *paredao* → jogo de perguntas e respostas\n` +
-        `• *impostor* → jogo de papéis secretos e votação\n\n` +
+        `${games.map((game) => `• *${game.key}* → ${game.description}`).join('\n')}\n\n` +
         `Comando: *!selecionarjogo paredao* ou *!selecionarjogo impostor*\n` +
         `Jogo selecionado neste grupo: *${selectedGame.toUpperCase()}*`
       );
@@ -270,7 +272,7 @@ class GroupGameHandler {
 
     if (command === '!selecionarjogo') {
       const option = (args[0] || '').toLowerCase();
-      if (!['paredao', 'impostor'].includes(option)) {
+      if (!isSupportedGame(option)) {
         await msg.reply('❌ Jogos disponíveis: paredao, impostor. Use !menujogos');
         return true;
       }
@@ -291,7 +293,8 @@ class GroupGameHandler {
         `!sair - Sair do jogo atual\n` +
         `!status - Status detalhado\n\n` +
         `🎤 *PAREDÃO*\n` +
-        `!iniciarparedao, !sortear, !comecar, !proximoturno, !skipturno, !encerrarturno, !finalizar\n\n` +
+        `!iniciarparedao [DURACAO UPDATE], !sortear, !comecar, !proximoturno, !skipturno, !encerrarturno, !finalizar\n` +
+        `Exemplo: !iniciarparedao 60 10\n\n` +
         `🕵️ *IMPOSTOR*\n` +
         `!iniciarimpostor, !partilhas N, !encerrarinscricoes\n` +
         `!fala texto (na sua vez), !votar @jogador, !encerrarvotacao\n\n` +
@@ -437,7 +440,16 @@ class GroupGameHandler {
     if (command === '!iniciarparedao') {
       const existingGame = await this.manager.getActiveGame(groupId, 'paredao');
       if (existingGame && existingGame.status !== 'finished') return msg.reply('❌ Já existe um paredão').then(() => true);
+      let turnSettings;
+      try {
+        turnSettings = parseTurnSettings(args);
+      } catch (error) {
+        await msg.reply(`❌ ${error.message}`);
+        return true;
+      }
+
       const gameId = await this.manager.createGame(groupId, 'paredao');
+      const configured = this.manager.configureTurnSettings(groupId, turnSettings);
       await this.setSelectedGame(groupId, 'paredao');
 
       const mentionIds = await this.mentionAllGroupMembers(chat, [senderId]);
@@ -445,7 +457,8 @@ class GroupGameHandler {
       if (mentionIds.length > 0) {
         announcement += `🎯 *CONVITE PARA TODOS:*\n${mentionIds.map((id) => `@${id.split('@')[0]}`).join(' ')}\n\n`;
       }
-      announcement += `📝 *PARA PARTICIPAR:*\n!entrar (se já cadastrado)\nou\n!entrar NUMERO SEU_NOME\nEx: !entrar 258866630883 João`;
+      announcement += `📝 *PARA PARTICIPAR:*\n!entrar (se já cadastrado)\nou\n!entrar NUMERO SEU_NOME\nEx: !entrar 258866630883 João\n\n`;
+      announcement += `⏱️ *Configuração deste jogo:*\n• Turno: ${configured.turnDurationMinutes} min\n• Atualização: ${configured.updateIntervalMinutes} min`;
       await chat.sendMessage(announcement, mentionIds.length > 0 ? { mentions: mentionIds } : undefined);
       await msg.reply(`✅ Paredão #${gameId} iniciado!`);
       return true;

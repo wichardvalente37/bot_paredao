@@ -1,43 +1,51 @@
-# Arquitetura do Bot Paredão
+# Arquitetura do Bot Maestro
 
-Este documento descreve a organização introduzida para remover o monolito do `index.js` e preparar a base para novos jogos.
+Esta arquitetura foi reorganizada para manter os jogos atômicos e independentes.
+
+## Princípios
+
+- **Atomicidade por jogo**: cada jogo vive em seu próprio módulo (`games/<jogo>`).
+- **Core compartilhado enxuto**: tudo que é comum entre jogos fica em `games/core`.
+- **Configuração por contexto**: regras específicas de um jogo não ficam em `config/` global.
+- **Escalabilidade**: adicionar jogo novo não exige misturar regras no mesmo diretório.
 
 ## Estrutura
 
 - `index.js`
-  - bootstrap da aplicação;
-  - criação do client WhatsApp;
-  - eventos globais (QR, auth, shutdown, erros de processo).
+  - bootstrap da aplicação e cliente WhatsApp.
 
 - `app/BotApplication.js`
-  - roteador central;
-  - separa entrada por contexto (DM, grupo, Supremo);
-  - evita acumular regras de negócio no bootstrap.
+  - roteamento central de mensagens e eventos.
 
-- `whatsapp/handlers/dmHandler.js`
-  - fluxo de perguntas e respostas no privado;
-  - validação de turno e envio para `game-manager`.
+- `games/core/`
+  - `gameRegistry.js`: catálogo dos jogos suportados pelo bot.
 
-- `whatsapp/handlers/groupGameHandler.js`
-  - comandos do jogo no grupo;
-  - estado do jogo, controle de turnos, admin e menções.
+- `games/paredao/`
+  - `ParedaoGameManager.js`: regras e orquestração do Paredão.
+  - `constants.js`: configuração e validação do Paredão (tempo de turno e atualização).
 
-- `whatsapp/handlers/supremoHandler.js`
-  - comandos dedicados do Supremo;
-  - isolamento de regras de moderação/troll.
+- `games/impostor/`
+  - `ImpostorGameManager.js`: fluxo e estado do Impostor.
+  - `impostorWords.js`: banco de palavras do Impostor.
 
-- `whatsapp/helpers/messageUtils.js`
-  - normalização de texto;
-  - fallback de menções (`mentionedIds` e `getMentions`) para compatibilidade de versões.
+- `whatsapp/handlers/`
+  - handlers por canal/contexto (`groupGameHandler`, `dmHandler`, `supremoHandler`).
 
-## Como adicionar um novo jogo
+- `utils/`
+  - utilitários realmente transversais ao sistema.
 
-1. Criar pasta dedicada (`games/<novo-jogo>/`).
-2. Implementar um handler de comandos para esse jogo.
-3. Registrar o handler no `BotApplication`.
-4. Reaproveitar helpers existentes para parsing/menções.
-5. Manter persistência isolada por entidades/tabelas do jogo.
+## Convenções para novos jogos
 
-## Observação
+1. Criar `games/<novo-jogo>/`.
+2. Colocar as regras e configs específicas dentro desse módulo.
+3. Registrar o jogo no `games/core/gameRegistry.js`.
+4. Expor comandos no handler de grupo sem acoplar regras a outro jogo.
 
-A lógica original do paredão foi preservada; a mudança foca em separação de responsabilidades e manutenção evolutiva.
+## Configuração de turno do Paredão
+
+Agora o admin pode iniciar o jogo com configuração explícita:
+
+- `!iniciarparedao` (usa padrão)
+- `!iniciarparedao 60 10` (turno de 60 min, atualização de 10 em 10 min)
+
+Com isso, o controle de tempo deixa de ficar hardcoded e passa a ser definido na abertura do jogo.
