@@ -41,6 +41,7 @@ class SupremoCommands {
     const helpText = `👑 *COMANDOS EXCLUSIVOS DO SUPREMO* 👑\n\n` +
       `🎯 *PODERES ABSOLUTOS:*\n` +
       `!ban @membro - Banir com contagem regressiva épica\n` +
+      `!banagora @membro - Ban imediato sem contagem\n` +
       `!randomban - Banir aleatoriamente alguém (surpresa!)\n` +
       `!poder - Mostrar seu poder atual\n` +
       `!poder @membro [min] - Conceder admin temporário\n` +
@@ -78,6 +79,31 @@ class SupremoCommands {
 
     // Ban normal do Supremo
     await this.executeBan(chat, targetId, false);
+  }
+
+
+  async banImmediate(chat, senderId, targetId) {
+    const isSupremo = await this.isSupremo(senderId);
+
+    if (!isSupremo) {
+      await chat.sendMessage('❌ Apenas o SUPREMO pode usar ban imediato.');
+      return;
+    }
+
+    if (await this.isSupremo(targetId)) {
+      await chat.sendMessage('👑 Bonita tentativa. O Supremo é imbanível.');
+      return;
+    }
+
+    try {
+      const targetName = await this.getDisplayName(targetId);
+      await chat.sendMessage(`⚡ *BAN IMEDIATO ATIVADO*\n@${targetId.split('@')[0]} foi removido sem contagem.`, { mentions: [targetId] });
+      await chat.removeParticipants([targetId]);
+      await chat.sendMessage(`✅ ${targetName} removido com sucesso.`);
+    } catch (error) {
+      console.error('Erro no ban imediato:', error);
+      await chat.sendMessage('❌ Não consegui executar o ban imediato. Verifique se sou admin no grupo.');
+    }
   }
 
   // Ban aleatório
@@ -316,7 +342,7 @@ class SupremoCommands {
           `⚡ *PODER TEMPORÁRIO CONCEDIDO* ⚡\n\n` +
           `${mentionText}, parabéns! Você foi promovido a admin por *${durationMinutes} minuto(s)*.\n` +
           `🧠 *Use com sabedoria... ou eu retiro com sarcasmo dobrado.*`,
-          { mentions: [await this.client.getContactById(targetId).catch(() => null)].filter(Boolean) }
+          { mentions: [targetId] }
         );
         return;
       }
@@ -325,7 +351,7 @@ class SupremoCommands {
         `⚡ *PODER DEFINITIVO (POR ENQUANTO)* ⚡\n\n` +
         `${mentionText}, ${targetName} agora tem poderes administrativos.\n` +
         `😈 *Não me faça arrepender desta decisão imperial.*`,
-        { mentions: [await this.client.getContactById(targetId).catch(() => null)].filter(Boolean) }
+        { mentions: [targetId] }
       );
     } catch (error) {
       console.error('Erro ao conceder poder:', error);
@@ -353,7 +379,7 @@ class SupremoCommands {
       }
 
       const mentionText = `@${targetId.split('@')[0]}`;
-      const payload = { mentions: [await this.client.getContactById(targetId).catch(() => null)].filter(Boolean) };
+      const payload = { mentions: [targetId] };
 
       if (isAuto) {
         await chat.sendMessage(
@@ -388,7 +414,7 @@ class SupremoCommands {
         `1) Respeite o trono\n` +
         `2) Use !comandos para jogar\n` +
         `3) Não tente tomar meu lugar 😌`,
-        contact ? { mentions: [contact] } : undefined
+        contact ? { mentions: [memberId] } : undefined
       );
     } catch (error) {
       console.error('Erro ao enviar boas-vindas do Supremo:', error);

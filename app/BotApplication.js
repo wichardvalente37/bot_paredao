@@ -1,5 +1,6 @@
 const DMHandler = require('../whatsapp/handlers/dmHandler');
 const GroupGameHandler = require('../whatsapp/handlers/groupGameHandler');
+const ImpostorGameManager = require('../game/impostorGameManager');
 const SupremoHandler = require('../whatsapp/handlers/supremoHandler');
 const { normalizeText } = require('../whatsapp/helpers/messageUtils');
 
@@ -11,7 +12,8 @@ class BotApplication {
     this.supremoCommands = supremoCommands;
     this.supremoHandler = new SupremoHandler(supremoCommands);
     this.dmHandler = new DMHandler({ db, manager });
-    this.groupGameHandler = new GroupGameHandler({ client, db, manager });
+    this.impostorManager = new ImpostorGameManager({ client, db, manager });
+    this.groupGameHandler = new GroupGameHandler({ client, db, manager, impostorManager: this.impostorManager });
     this.isReady = false;
   }
 

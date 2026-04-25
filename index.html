@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bot Paredão - Alive</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #10131a; color: #f4f4f4; display: grid; place-items: center; min-height: 100vh; margin: 0; }
+    .card { background: #1a1f2b; border: 1px solid #2e3a52; border-radius: 12px; padding: 24px; max-width: 680px; }
+    code { background: #0f1420; padding: 2px 6px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>🤖 Bot do Paredão está acordado</h1>
+    <p>Esta página existe para manter o host ativo e confirmar que o processo está online.</p>
+    <p>Endpoint de saúde: <code>/ping</code></p>
+    <p id="uptime"></p>
+  </main>
+  <script>
+    fetch('/ping').then(r => r.json()).then(data => {
+      document.getElementById('uptime').textContent = `Status: ${data.status} | uptime: ${Math.round(data.uptime)}s`;
+    }).catch(() => {
+      document.getElementById('uptime').textContent = 'Não foi possível consultar /ping';
+    });
+  </script>
+</body>
+</html>

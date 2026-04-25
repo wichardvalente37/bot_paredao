@@ -5,7 +5,45 @@ const qrcode = require('qrcode-terminal');
 const Database = require('./database');
 const GameManager = require('./game-manager');
 const SupremoCommands = require('./supremo-commands');
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
 const BotApplication = require('./app/BotApplication');
+
+
+function startHealthServer() {
+  const port = Number.parseInt(process.env.PORT || '3000', 10);
+  const indexPath = path.join(__dirname, 'index.html');
+
+  const server = http.createServer((req, res) => {
+    if (req.url === '/ping') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() }));
+      return;
+    }
+
+    if (req.url === '/' || req.url === '/index.html') {
+      fs.readFile(indexPath, 'utf8', (error, html) => {
+        if (error) {
+          res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+          res.end('Erro ao carregar index.html');
+          return;
+        }
+
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(html);
+      });
+      return;
+    }
+
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'not_found' }));
+  });
+
+  server.listen(port, () => {
+    console.log(`🌐 Health server ativo em http://0.0.0.0:${port}`);
+  });
+}
 
 function createClient() {
   const executablePath = process.env.CHROME_PATH || undefined;
@@ -70,6 +108,7 @@ async function bootstrap() {
   console.log('====================================');
 
   app.setupEvents();
+  startHealthServer();
   client.initialize();
 }
 

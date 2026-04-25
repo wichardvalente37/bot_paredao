@@ -39,6 +39,7 @@ class Database {
         id SERIAL PRIMARY KEY,
         group_id VARCHAR(80) NOT NULL,
         status VARCHAR(20) DEFAULT 'waiting',
+        game_type VARCHAR(20) DEFAULT 'paredao',
         current_player_id VARCHAR(80),
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
@@ -98,7 +99,10 @@ class Database {
         restored BOOLEAN DEFAULT false
       );
 
+      ALTER TABLE games ADD COLUMN IF NOT EXISTS game_type VARCHAR(20) DEFAULT 'paredao';
+
       CREATE INDEX IF NOT EXISTS idx_games_group_status ON games(group_id, status);
+      CREATE INDEX IF NOT EXISTS idx_games_group_type_status ON games(group_id, game_type, status);
       CREATE INDEX IF NOT EXISTS idx_game_players_game ON game_players(game_id);
       CREATE INDEX IF NOT EXISTS idx_questions_game_to_player ON questions(game_id, to_player_id);
       CREATE INDEX IF NOT EXISTS idx_questions_dm_message_id ON questions(dm_message_id);

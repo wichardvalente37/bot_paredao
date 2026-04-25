@@ -24,6 +24,16 @@ class SupremoHandler {
       return true;
     }
 
+
+    if (command === '!banagora') {
+      if (mentionedIds.length > 0) {
+        await this.supremoCommands.banImmediate(chat, senderId, mentionedIds[0]);
+      } else {
+        await chat.sendMessage('❌ Use: !banagora @membro');
+      }
+      return true;
+    }
+
     if (command === '!randomban') {
       await this.supremoCommands.randomBan(chat, senderId);
       return true;

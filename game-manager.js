@@ -16,21 +16,26 @@ class GameManager {
     return clean.length === 12 ? clean : null;
   }
 
-  async createGame(groupId) {
+  async createGame(groupId, gameType = 'paredao') {
     const res = await db.query(
-      'INSERT INTO games(group_id) VALUES($1) RETURNING id',
-      [groupId]
+      'INSERT INTO games(group_id, game_type) VALUES($1, $2) RETURNING id',
+      [groupId, gameType]
     );
     const gameId = res.rows[0].id;
-    console.log(`🎮 PAREDÃO #${gameId} CRIADO!`);
+    console.log(`🎮 JOGO ${gameType.toUpperCase()} #${gameId} CRIADO!`);
     return gameId;
   }
 
-  async getActiveGame(groupId) {
-    const res = await db.query(
-      'SELECT * FROM games WHERE group_id = $1 AND status != $2 ORDER BY id DESC LIMIT 1',
-      [groupId, 'finished']
-    );
+  async getActiveGame(groupId, gameType = null) {
+    const res = gameType
+      ? await db.query(
+          'SELECT * FROM games WHERE group_id = $1 AND game_type = $2 AND status != $3 ORDER BY id DESC LIMIT 1',
+          [groupId, gameType, 'finished']
+        )
+      : await db.query(
+          'SELECT * FROM games WHERE group_id = $1 AND status != $2 ORDER BY id DESC LIMIT 1',
+          [groupId, 'finished']
+        );
     return res.rows[0];
   }
 
@@ -203,7 +208,7 @@ class GameManager {
       
       // Enviar com menção se tiver contato
       if (contact) {
-        await chat.sendMessage(announcement, { mentions: [contact] });
+        await chat.sendMessage(announcement, { mentions: [player.id] });
       } else {
         await chat.sendMessage(announcement);
       }
@@ -507,10 +512,10 @@ class GameManager {
       
       // Preparar menções
       const mentions = [];
-      if (playerContact) mentions.push(playerContact);
+      if (playerContact) mentions.push(player.id);
       if (nextPlayerInfo.player) {
         const nextContact = await this.getContactForMention(nextPlayerInfo.player.id);
-        if (nextContact) mentions.push(nextContact);
+        if (nextContact) mentions.push(nextPlayerInfo.player.id);
       }
       
       // Enviar mensagem com menções se houver
@@ -920,7 +925,7 @@ module.exports = GameManager;
 //       [groupId]
 //     );
 //     const gameId = res.rows[0].id;
-//     console.log(`🎮 PAREDÃO #${gameId} CRIADO!`);
+//     console.log(`🎮 JOGO ${gameType.toUpperCase()} #${gameId} CRIADO!`);
 //     return gameId;
 //   }
 
