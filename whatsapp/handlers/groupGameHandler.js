@@ -231,7 +231,12 @@ class GroupGameHandler {
       }
 
       try {
-        await this.impostorManager.forceCloseVoting({ groupId, chat });
+        const state = await this.impostorManager.getState(groupId, currentGame?.id);
+        if (state?.phase === 'sharing') {
+          await this.impostorManager.forceCloseSharing({ groupId, chat });
+        } else {
+          await this.impostorManager.forceCloseVoting({ groupId, chat });
+        }
       } catch (error) {
         await msg.reply(`❌ ${error.message}`);
       }

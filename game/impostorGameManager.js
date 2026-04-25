@@ -133,7 +133,9 @@ class ImpostorGameManager {
 ` +
       `🎯 Palavra secreta definida.
 ` +
-      `🔁 Cada jogador tem *${state.sharesPerPlayer} partilhas* na sua vez.
+      `🔁 Cada jogador tem *${state.sharesPerPlayer} partilhas* no total.
+` +
+      `➡️ A ordem roda em círculo: *1 dica por vez*.
 ` +
       `📌 Para partilhar use: *!fala sua dica aqui*.
 ` +
@@ -203,19 +205,27 @@ class ImpostorGameManager {
 
     await chat.sendMessage(`💬 *${current.name}* (${shareNumber}/${state.sharesPerPlayer}): ${clean}`);
 
-    if (shareNumber < state.sharesPerPlayer) {
-      const remaining = state.sharesPerPlayer - shareNumber;
-      await chat.sendMessage(`⏭️ ${current.name}, faltam ${remaining} partilha(s) suas nesta vez.`);
-      return { phase: state.phase };
-    }
+    const allFinished = state.players.every(
+      (player) => (state.playerShares.get(player.id) || 0) >= state.sharesPerPlayer
+    );
+    if (!allFinished) {
+      let nextTurnIndex = state.currentTurnIndex;
+      let safety = 0;
 
-    state.currentTurnIndex += 1;
+      do {
+        nextTurnIndex = (nextTurnIndex + 1) % state.players.length;
+        safety += 1;
+      } while (
+        safety <= state.players.length &&
+        (state.playerShares.get(state.players[nextTurnIndex].id) || 0) >= state.sharesPerPlayer
+      );
 
-    if (state.currentTurnIndex < state.players.length) {
+      state.currentTurnIndex = nextTurnIndex;
       const next = state.players[state.currentTurnIndex];
+      const nextUsed = state.playerShares.get(next.id) || 0;
       await this.db.updateGameStatus(state.gameId, 'active', next.id);
       await this.persistState(groupId, state, 'sharing');
-      await chat.sendMessage(`🎤 Vez de *${next.name}*. Use !fala ...`);
+      await chat.sendMessage(`🎤 Vez de *${next.name}* (${nextUsed + 1}/${state.sharesPerPlayer}). Use !fala ...`);
       return { phase: state.phase };
     }
 
@@ -262,6 +272,26 @@ class ImpostorGameManager {
       targetName: target.name,
       done: state.votes.size >= state.players.length
     };
+  }
+
+  async forceCloseSharing({ groupId, chat }) {
+    const state = await this.getState(groupId);
+    if (!state || state.phase !== 'sharing') throw new Error('Nenhuma rodada de partilhas ativa.');
+
+    state.phase = 'voting';
+    await this.db.updateGameStatus(state.gameId, 'active', null);
+    await this.persistState(groupId, state, 'voting');
+
+    await chat.sendMessage(
+      `⏹️ *Partilhas encerradas manualmente!*
+
+` +
+      `🗳️ Agora todos votam em quem acham que é impostor.
+` +
+      `Use: *!votar @jogador*.
+` +
+      `Quando todos votarem (ou admin usar *!encerrarvotacao*), eu revelo o resultado.`
+    );
   }
 
   async forceCloseVoting({ groupId, chat }) {
