@@ -15,11 +15,14 @@ class BotApplication {
     this.impostorManager = new ImpostorGameManager({ client, db, manager });
     this.groupGameHandler = new GroupGameHandler({ client, db, manager, impostorManager: this.impostorManager });
     this.isReady = false;
+    this.reconnectAttempts = 0;
+    this.maxReconnectDelayMs = 30000;
   }
 
   setupEvents() {
     this.client.on('ready', () => {
       this.isReady = true;
+      this.reconnectAttempts = 0;
       console.log('====================================');
       console.log('🤖 BOT DO PAREDÃO PRONTO PARA AÇÃO!');
       console.log('====================================');
@@ -28,7 +31,7 @@ class BotApplication {
     this.client.on('disconnected', (reason) => {
       console.log('🔌 Desconectado:', reason);
       this.isReady = false;
-      process.exit(0);
+      this.scheduleReconnect();
     });
 
     this.client.on('message', async (msg) => this.handleMessage(msg));
@@ -93,6 +96,20 @@ class BotApplication {
       console.error('❌ Erro no roteamento:', error);
       await msg.reply('❌ Ocorreu um erro').catch(() => null);
     }
+  }
+
+  scheduleReconnect() {
+    const delay = Math.min(5000 * (this.reconnectAttempts + 1), this.maxReconnectDelayMs);
+    this.reconnectAttempts += 1;
+    console.log(`🔁 Tentando reconectar em ${Math.round(delay / 1000)}s (tentativa ${this.reconnectAttempts})...`);
+    setTimeout(async () => {
+      try {
+        await this.client.initialize();
+      } catch (error) {
+        console.error('❌ Falha ao reconectar:', error.message);
+        this.scheduleReconnect();
+      }
+    }, delay);
   }
 }
 

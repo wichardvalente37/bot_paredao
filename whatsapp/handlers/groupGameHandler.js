@@ -21,12 +21,17 @@ class GroupGameHandler {
     }
   }
 
-  getSelectedGame(groupId) {
-    return this.selectedGameByGroup.get(groupId) || 'paredao';
+  async getSelectedGame(groupId) {
+    const cached = this.selectedGameByGroup.get(groupId);
+    if (cached) return cached;
+    const selected = await this.manager.getSelectedGame(groupId);
+    this.selectedGameByGroup.set(groupId, selected);
+    return selected;
   }
 
-  setSelectedGame(groupId, gameName) {
+  async setSelectedGame(groupId, gameName) {
     this.selectedGameByGroup.set(groupId, gameName);
+    await this.manager.setSelectedGame(groupId, gameName);
   }
 
   async sendUserRegistrationStatus(msg, targetId, isSelf = false) {
@@ -129,7 +134,7 @@ class GroupGameHandler {
       }
 
       const gameId = await this.impostorManager.createGame(groupId);
-      this.setSelectedGame(groupId, 'impostor');
+      await this.setSelectedGame(groupId, 'impostor');
 
       await chat.sendMessage(
         `🕵️ *JOGO DO IMPOSTOR #${gameId} CRIADO!*
@@ -177,6 +182,20 @@ class GroupGameHandler {
 
       try {
         await this.impostorManager.closeEntriesAndStart({ groupId, chat });
+      } catch (error) {
+        await msg.reply(`❌ ${error.message}`);
+      }
+      return true;
+    }
+
+    if (command === '!encerrarpartilhas') {
+      if (!isAdmin && !isSupremo) {
+        await msg.reply('❌ Apenas administradores podem encerrar partilhas.');
+        return true;
+      }
+
+      try {
+        await this.impostorManager.forceCloseSharing({ groupId, chat });
       } catch (error) {
         await msg.reply(`❌ ${error.message}`);
       }
@@ -240,7 +259,7 @@ class GroupGameHandler {
     if (!chat.isGroup || !command.startsWith('!')) return false;
 
     const groupId = chat.id._serialized;
-    const selectedGame = this.getSelectedGame(groupId);
+    const selectedGame = await this.getSelectedGame(groupId);
 
     if (command === '!ping') {
       await msg.reply('🏓 Pong!');
@@ -264,7 +283,7 @@ class GroupGameHandler {
         await msg.reply('❌ Jogos disponíveis: paredao, impostor. Use !menujogos');
         return true;
       }
-      this.setSelectedGame(groupId, option);
+      await this.setSelectedGame(groupId, option);
       await msg.reply(`✅ Jogo ativo do grupo definido para *${option.toUpperCase()}*.`);
       return true;
     }
@@ -283,7 +302,7 @@ class GroupGameHandler {
         `🎤 *PAREDÃO*\n` +
         `!iniciarparedao, !sortear, !comecar, !proximoturno, !skipturno, !encerrarturno, !finalizar\n\n` +
         `🕵️ *IMPOSTOR*\n` +
-        `!iniciarimpostor, !partilhas N, !encerrarinscricoes\n` +
+        `!iniciarimpostor, !partilhas N, !encerrarinscricoes, !encerrarpartilhas\n` +
         `!fala texto (na sua vez), !votar @jogador, !encerrarvotacao\n\n` +
         `👮 *ADMIN EXTRA*\n` +
         `!forcarentrar @, !remover @, !admin @, !removeradmin @`
@@ -300,7 +319,7 @@ class GroupGameHandler {
         `2) Todos entram com !entrar NUMERO NOME\n` +
         `3) Admin usa !encerrarinscricoes\n` +
         `4) Cada um recebe papel no privado\n` +
-        `5) Em ordem, cada jogador usa !fala ...\n` +
+        `5) Em círculo, cada jogador fala 1 dica por vez com !fala ...\n` +
         `6) No final todos votam com !votar @\n` +
         `7) Bot revela impostor(es)`
       );
@@ -388,7 +407,7 @@ class GroupGameHandler {
       if (!game) return msg.reply('❌ Nenhum jogo ativo').then(() => true);
 
       if (game.game_type === 'impostor') {
-        const state = this.impostorManager.getState(groupId);
+        const state = await this.impostorManager.getState(groupId, game.id);
         const players = await this.db.getGamePlayers(game.id);
         const phase = state?.phase || game.status;
         const votes = state?.votes?.size || 0;
@@ -428,7 +447,7 @@ class GroupGameHandler {
       const existingGame = await this.manager.getActiveGame(groupId, 'paredao');
       if (existingGame && existingGame.status !== 'finished') return msg.reply('❌ Já existe um paredão').then(() => true);
       const gameId = await this.manager.createGame(groupId, 'paredao');
-      this.setSelectedGame(groupId, 'paredao');
+      await this.setSelectedGame(groupId, 'paredao');
 
       const mentionIds = await this.mentionAllGroupMembers(chat, [senderId]);
       let announcement = `🎮 *NOVO PAREDÃO #${gameId}!*\n\n`;
