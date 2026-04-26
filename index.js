@@ -16,12 +16,16 @@ const puppeteer = require('puppeteer');
 const qrState = {
   dataUrl: null,
   authenticated: false,
+  ready: false,
+  clientState: 'starting',
   lastUpdated: null,
 };
 
 function getQrStatusPayload() {
   return {
     authenticated: qrState.authenticated,
+    ready: qrState.ready,
+    clientState: qrState.clientState,
     hasQr: Boolean(qrState.dataUrl),
     qrDataUrl: qrState.dataUrl,
     lastUpdated: qrState.lastUpdated,
@@ -91,9 +95,17 @@ function renderQrPage() {
         const statusText = document.getElementById('statusText');
         const qrImage = document.getElementById('qrImage');
 
-        if (data.authenticated) {
-          statusText.textContent = '✅ Já autenticado. Não é necessário QR no momento.';
+        if (data.ready) {
+          statusText.textContent = '✅ Bot online e pronto para receber comandos.';
           statusText.className = 'status-ok';
+          qrImage.style.display = 'none';
+          qrImage.removeAttribute('src');
+          return;
+        }
+
+        if (data.authenticated) {
+          statusText.textContent = '🟡 Sessão autenticada. Aguardando sincronização do WhatsApp Web...';
+          statusText.className = 'status-wait';
           qrImage.style.display = 'none';
           qrImage.removeAttribute('src');
           return;
@@ -257,6 +269,8 @@ async function bootstrap() {
     try {
       qrState.dataUrl = await QRCode.toDataURL(qr);
       qrState.authenticated = false;
+      qrState.ready = false;
+      qrState.clientState = 'qr_received';
       qrState.lastUpdated = new Date().toISOString();
       console.log('🧾 QR web atualizado em memória. Acesse /qr');
     } catch (error) {
@@ -266,18 +280,29 @@ async function bootstrap() {
 
   client.on('authenticated', () => {
     qrState.authenticated = true;
+    qrState.ready = false;
+    qrState.clientState = 'authenticated';
     qrState.dataUrl = null;
     qrState.lastUpdated = new Date().toISOString();
-    console.log('✅ Autenticado!');
+    console.log('✅ Sessão autenticada. Aguardando evento "ready"...');
   });
   client.on('ready', () => {
     qrState.authenticated = true;
+    qrState.ready = true;
+    qrState.clientState = 'ready';
     qrState.dataUrl = null;
     qrState.lastUpdated = new Date().toISOString();
     console.log('🚀 Cliente pronto para uso.');
   });
+  client.on('change_state', (state) => {
+    qrState.clientState = String(state || 'unknown').toLowerCase();
+    qrState.lastUpdated = new Date().toISOString();
+    console.log(`🔄 Estado do cliente WhatsApp: ${state}`);
+  });
   client.on('auth_failure', (err) => {
     qrState.authenticated = false;
+    qrState.ready = false;
+    qrState.clientState = 'auth_failure';
     qrState.dataUrl = null;
     qrState.lastUpdated = new Date().toISOString();
     console.error('❌ Falha na autenticação:', err.message);
@@ -285,6 +310,8 @@ async function bootstrap() {
   });
   client.on('disconnected', (reason) => {
     qrState.authenticated = false;
+    qrState.ready = false;
+    qrState.clientState = `disconnected:${String(reason || 'unknown').toLowerCase()}`;
     qrState.lastUpdated = new Date().toISOString();
     console.log('⚠️ Cliente desconectado:', reason);
   });

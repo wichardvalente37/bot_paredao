@@ -17,12 +17,19 @@ class BotApplication {
     this.isReady = false;
     this.reconnectAttempts = 0;
     this.maxReconnectDelayMs = 30000;
+    this.reconnectTimer = null;
+    this.reconnectInFlight = false;
   }
 
   setupEvents() {
     this.client.on('ready', () => {
       this.isReady = true;
       this.reconnectAttempts = 0;
+      this.reconnectInFlight = false;
+      if (this.reconnectTimer) {
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
+      }
       this.supremoCommands.startAutoGreetings();
       console.log('====================================');
       console.log('🤖 BOT MAESTRO PRONTO PARA AÇÃO!');
@@ -32,6 +39,7 @@ class BotApplication {
     this.client.on('disconnected', (reason) => {
       console.log('🔌 Desconectado:', reason);
       this.isReady = false;
+      this.reconnectInFlight = false;
       this.supremoCommands.stopAutoGreetings();
       this.scheduleReconnect();
     });
@@ -101,14 +109,22 @@ class BotApplication {
   }
 
   scheduleReconnect() {
+    if (this.reconnectTimer || this.reconnectInFlight) {
+      console.log('ℹ️ Reconexão já agendada/em andamento.');
+      return;
+    }
+
     const delay = Math.min(5000 * (this.reconnectAttempts + 1), this.maxReconnectDelayMs);
     this.reconnectAttempts += 1;
     console.log(`🔁 Tentando reconectar em ${Math.round(delay / 1000)}s (tentativa ${this.reconnectAttempts})...`);
-    setTimeout(async () => {
+    this.reconnectTimer = setTimeout(async () => {
+      this.reconnectTimer = null;
+      this.reconnectInFlight = true;
       try {
         await this.client.initialize();
       } catch (error) {
         console.error('❌ Falha ao reconectar:', error.message);
+        this.reconnectInFlight = false;
         this.scheduleReconnect();
       }
     }, delay);
