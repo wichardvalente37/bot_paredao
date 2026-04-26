@@ -210,16 +210,32 @@ function ensureChromeAvailable() {
 function createClient() {
   const executablePath = ensureChromeAvailable();
   const headless = process.env.WWEBJS_HEADLESS ? process.env.WWEBJS_HEADLESS !== 'false' : true;
+  const authPath = process.env.WWEBJS_AUTH_PATH || '/tmp/.wwebjs_auth';
+  const webVersionRemotePath = process.env.WWEBJS_WEB_VERSION_REMOTE_PATH
+    || 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1023553226-alpha.html';
+  const puppeteerArgs = [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--no-zygote',
+    '--single-process',
+  ];
+
+  console.log(`🗂️ Sessão do WhatsApp em: ${authPath}`);
 
   return new Client({
     authStrategy: new LocalAuth({
       clientId: 'maestro-bot',
-      dataPath: './.wwebjs_auth',
+      dataPath: authPath,
     }),
+    webVersionCache: {
+      type: 'remote',
+      remotePath: webVersionRemotePath,
+    },
     puppeteer: {
       headless,
       executablePath,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      args: puppeteerArgs,
     },
   });
 }
@@ -260,7 +276,13 @@ async function bootstrap() {
     qrState.lastUpdated = new Date().toISOString();
     console.log('🚀 Cliente pronto para uso.');
   });
-  client.on('auth_failure', (err) => console.error('❌ Falha na autenticação:', err.message));
+  client.on('auth_failure', (err) => {
+    qrState.authenticated = false;
+    qrState.dataUrl = null;
+    qrState.lastUpdated = new Date().toISOString();
+    console.error('❌ Falha na autenticação:', err.message);
+    console.error('💡 Dica: apague a sessão anterior (WWEBJS_AUTH_PATH) para forçar um pareamento limpo.');
+  });
   client.on('disconnected', (reason) => {
     qrState.authenticated = false;
     qrState.lastUpdated = new Date().toISOString();
