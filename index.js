@@ -8,6 +8,7 @@ const SupremoCommands = require('./supremo-commands');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 const BotApplication = require('./app/BotApplication');
 const puppeteer = require('puppeteer');
 
@@ -59,8 +60,33 @@ function resolveChromeExecutablePath() {
   }
 }
 
+function ensureChromeAvailable() {
+  let executablePath = resolveChromeExecutablePath();
+
+  if (executablePath && fs.existsSync(executablePath)) {
+    return executablePath;
+  }
+
+  console.warn('⚠️ Chrome do Puppeteer não encontrado. Tentando instalar automaticamente...');
+
+  try {
+    execSync('npx puppeteer browsers install chrome', { stdio: 'inherit' });
+  } catch (error) {
+    console.error('❌ Falha ao instalar o Chrome do Puppeteer:', error.message);
+    return executablePath;
+  }
+
+  executablePath = resolveChromeExecutablePath();
+
+  if (!executablePath || !fs.existsSync(executablePath)) {
+    console.error('❌ Chrome ainda não encontrado após tentativa de instalação automática.');
+  }
+
+  return executablePath;
+}
+
 function createClient() {
-  const executablePath = resolveChromeExecutablePath();
+  const executablePath = ensureChromeAvailable();
   const headless = process.env.WWEBJS_HEADLESS ? process.env.WWEBJS_HEADLESS !== 'false' : true;
 
   return new Client({
