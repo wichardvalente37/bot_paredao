@@ -6,15 +6,35 @@ class Database {
     this.pg = null;
   }
 
-  async connect() {
-    if (this.pg) return;
-    this.pg = new PGClient({
+  buildConnectionConfig() {
+    const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL || null;
+    const explicitSslMode = (process.env.DB_SSLMODE || process.env.PGSSLMODE || '').toLowerCase();
+    const useSsl = process.env.DB_SSL === 'true'
+      || explicitSslMode === 'require'
+      || Boolean(connectionString && /sslmode=require/i.test(connectionString));
+
+    const ssl = useSsl ? { rejectUnauthorized: false } : undefined;
+
+    if (connectionString) {
+      return {
+        connectionString,
+        ssl,
+      };
+    }
+
+    return {
       host: process.env.DB_HOST || 'localhost',
-      port: process.env.DB_PORT ? parseInt(process.env.DB_PORT) : 5432,
+      port: process.env.DB_PORT ? parseInt(process.env.DB_PORT, 10) : 5432,
       database: process.env.DB_NAME || 'paredao',
       user: process.env.DB_USER || 'postgres',
-      password: process.env.DB_PASSWORD || 'postgres'
-    });
+      password: process.env.DB_PASSWORD || 'postgres',
+      ssl,
+    };
+  }
+
+  async connect() {
+    if (this.pg) return;
+    this.pg = new PGClient(this.buildConnectionConfig());
     await this.pg.connect();
     await this.createTables();
     
