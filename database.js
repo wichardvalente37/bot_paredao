@@ -15,19 +15,12 @@ class Database {
 
     const ssl = useSsl ? { rejectUnauthorized: false } : undefined;
 
-    if (connectionString) {
-      return {
-        connectionString,
-        ssl,
-      };
+    if (!connectionString) {
+      throw new Error('DATABASE_URL não configurada. Defina a URL completa de conexão no .env.');
     }
 
     return {
-      host: process.env.DB_HOST || 'localhost',
-      port: process.env.DB_PORT ? parseInt(process.env.DB_PORT, 10) : 5432,
-      database: process.env.DB_NAME || 'paredao',
-      user: process.env.DB_USER || 'postgres',
-      password: process.env.DB_PASSWORD || 'postgres',
+      connectionString,
       ssl,
     };
   }
