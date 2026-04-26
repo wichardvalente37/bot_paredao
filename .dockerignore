@@ -1,0 +1,8 @@
+node_modules/
+.env
+.wwebjs_auth/
+whatsapp_session/
+*.log
+.wwwebjs_cache/
+.wwebjs_cache/
+package-lock.json
