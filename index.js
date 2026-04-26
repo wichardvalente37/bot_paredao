@@ -9,9 +9,7 @@ const SupremoCommands = require('./supremo-commands');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
 const BotApplication = require('./app/BotApplication');
-const puppeteer = require('puppeteer');
 
 const qrState = {
   dataUrl: null,
@@ -182,45 +180,19 @@ function startHealthServer() {
 }
 
 function resolveChromeExecutablePath() {
+  if (process.env.WWEBJS_EXECUTABLE_PATH) {
+    return process.env.WWEBJS_EXECUTABLE_PATH;
+  }
+
   if (process.env.CHROME_PATH) {
     return process.env.CHROME_PATH;
   }
 
-  try {
-    return puppeteer.executablePath();
-  } catch (error) {
-    console.warn('⚠️ Não foi possível resolver o Chrome do Puppeteer automaticamente:', error.message);
-    return undefined;
-  }
-}
-
-function ensureChromeAvailable() {
-  let executablePath = resolveChromeExecutablePath();
-
-  if (executablePath && fs.existsSync(executablePath)) {
-    return executablePath;
-  }
-
-  console.warn('⚠️ Chrome do Puppeteer não encontrado. Tentando instalar automaticamente...');
-
-  try {
-    execSync('npx puppeteer browsers install chrome', { stdio: 'inherit' });
-  } catch (error) {
-    console.error('❌ Falha ao instalar o Chrome do Puppeteer:', error.message);
-    return executablePath;
-  }
-
-  executablePath = resolveChromeExecutablePath();
-
-  if (!executablePath || !fs.existsSync(executablePath)) {
-    console.error('❌ Chrome ainda não encontrado após tentativa de instalação automática.');
-  }
-
-  return executablePath;
+  return undefined;
 }
 
 function createClient() {
-  const executablePath = ensureChromeAvailable();
+  const executablePath = resolveChromeExecutablePath();
   const headless = process.env.WWEBJS_HEADLESS ? process.env.WWEBJS_HEADLESS !== 'false' : true;
   const authPath = process.env.WWEBJS_AUTH_PATH || '/tmp/.wwebjs_auth';
   const webVersionRemotePath = process.env.WWEBJS_WEB_VERSION_REMOTE_PATH
@@ -234,6 +206,11 @@ function createClient() {
   ];
 
   console.log(`🗂️ Sessão do WhatsApp em: ${authPath}`);
+  if (executablePath) {
+    console.log(`🌐 Navegador configurado via WWEBJS_EXECUTABLE_PATH/CHROME_PATH: ${executablePath}`);
+  } else {
+    console.log('🌐 Usando navegador fornecido pelo ambiente (sem download automático do Chrome).');
+  }
 
   return new Client({
     authStrategy: new LocalAuth({
@@ -246,8 +223,8 @@ function createClient() {
     },
     puppeteer: {
       headless,
-      executablePath,
       args: puppeteerArgs,
+      ...(executablePath ? { executablePath } : {}),
     },
   });
 }
