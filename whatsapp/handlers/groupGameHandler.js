@@ -3,11 +3,12 @@ const { listGames, isSupportedGame } = require('../../games/core/gameRegistry');
 const { parseTurnSettings } = require('../../games/paredao/constants');
 
 class GroupGameHandler {
-  constructor({ client, db, manager, impostorManager }) {
+  constructor({ client, db, manager, impostorManager, namoroManager }) {
     this.client = client;
     this.db = db;
     this.manager = manager;
     this.impostorManager = impostorManager;
+    this.namoroManager = namoroManager;
     this.selectedGameByGroup = new Map();
   }
 
@@ -253,6 +254,70 @@ class GroupGameHandler {
     return false;
   }
 
+
+  async handleNamoroFlow({ msg, chat, senderId, command, args, isAdmin, isSupremo }) {
+    const groupId = chat.id._serialized;
+    const currentGame = await this.manager.getActiveGame(groupId, 'namoro');
+
+    if (command === '!iniciarnamoro') {
+      if (!isAdmin && !isSupremo) {
+        await msg.reply('❌ Apenas administradores podem iniciar o Vai Dar Namoro.');
+        return true;
+      }
+      if (currentGame && currentGame.status !== 'finished') {
+        await msg.reply('❌ Já existe um Vai Dar Namoro ativo/preparação neste grupo.');
+        return true;
+      }
+
+      try {
+        const created = await this.namoroManager.createGame(groupId, args[0]);
+        await this.setSelectedGame(groupId, 'namoro');
+        await chat.sendMessage(
+          `💘 *VAI DAR NAMORO #${created.gameId} CRIADO!*\n\n` +
+          `📝 Entrada: *!entrar SEXO* (se já cadastrado)\n` +
+          `ou *!entrar NUMERO NOME SEXO* (novo cadastro)\n` +
+          `⚧️ Sexo obrigatório: M ou F (também pode usar *!sexo M/F*)\n` +
+          `⏱️ Duração configurada: ${created.durationMinutes} min\n` +
+          `✅ Para começar e fechar inscrições: *!encerrarinscricoes*`
+        );
+      } catch (error) {
+        await msg.reply(`❌ ${error.message}`);
+      }
+      return true;
+    }
+
+    if (command === '!sexo') {
+      try {
+        const gender = await this.namoroManager.setGender(senderId, args[0]);
+        await msg.reply(`✅ Sexo atualizado para: *${gender.toUpperCase()}*`);
+      } catch (error) {
+        await msg.reply(`❌ ${error.message}`);
+      }
+      return true;
+    }
+
+    if (command === '!encerrarinscricoes' && currentGame) {
+      if (!isAdmin && !isSupremo) {
+        await msg.reply('❌ Apenas administradores podem encerrar inscrições.');
+        return true;
+      }
+
+      try {
+        const state = await this.namoroManager.startGame({ groupId, chat });
+        await chat.sendMessage(
+          `🔒 Grupo trancado para admins durante ${state.durationMinutes} min.\n` +
+          `📩 Cada jogador pode mandar quantos lances quiser no meu DM (texto, foto, áudio, sticker).\n` +
+          `❤️ Depois dê match por ID no DM: *!match AMR-001ABC*.`
+        );
+      } catch (error) {
+        await msg.reply(`❌ ${error.message}`);
+      }
+      return true;
+    }
+
+    return false;
+  }
+
   async handle({ msg, chat, senderId, command, args }) {
     if (!chat.isGroup || !command.startsWith('!')) return false;
 
@@ -270,7 +335,7 @@ class GroupGameHandler {
       await msg.reply(
         `🎮 *MENU DE JOGOS*\n\n` +
         `${games.map((game) => `• *${game.key}* → ${game.description}`).join('\n')}\n\n` +
-        `Comando: *!selecionarjogo paredao* ou *!selecionarjogo impostor*\n` +
+        `Comando: *!selecionarjogo paredao* | *impostor* | *namoro*\n` +
         `Para desmarcar: *!deselecionarjogo* (modo automático)\n` +
         `Jogo configurado neste grupo: *${(configuredGame || 'auto').toUpperCase()}*`
       );
@@ -280,7 +345,7 @@ class GroupGameHandler {
     if (command === '!selecionarjogo') {
       const option = (args[0] || '').toLowerCase();
       if (!isSupportedGame(option)) {
-        await msg.reply('❌ Jogos disponíveis: paredao, impostor. Use !menujogos');
+        await msg.reply('❌ Jogos disponíveis: paredao, impostor, namoro. Use !menujogos');
         return true;
       }
 
@@ -306,7 +371,7 @@ class GroupGameHandler {
         `🤖 *HELP GERAL* 🤖\n\n` +
         `🎮 *GERAL*\n` +
         `!menujogos - Lista de jogos\n` +
-        `!selecionarjogo [paredao|impostor] - Selecionar fluxo\n` +
+        `!selecionarjogo [paredao|impostor|namoro] - Selecionar fluxo\n` +
         `!deselecionarjogo - Voltar para seleção automática\n` +
         `!entrar [NUMERO NOME] - Entrar no jogo atual (auto-completa 258)\n` +
         `!adicionar @pessoa [NUMERO NOME] - Admin adiciona/atualiza e entra no jogo\n` +
@@ -323,6 +388,9 @@ class GroupGameHandler {
         `🕵️ *IMPOSTOR*\n` +
         `!iniciarimpostor, !partilhas N, !encerrarinscricoes\n` +
         `!fala texto (na sua vez), !votar @jogador, !encerrarvotacao\n\n` +
+        `💘 *VAI DAR NAMORO*\n` +
+        `!iniciarnamoro [min], !encerrarinscricoes, !sexo M/F\n` +
+        `DM: envie lances e use !match ID\n\n` +
         `👮 *ADMIN EXTRA*\n` +
         `!forcarentrar/@adicionar @, !remover @, !admin @, !removeradmin @\n` +
         `!editarjogador @ NUMERO NOME, !bloquearedicao, !permitiredicao, !clonarjogo [tipo] [id]`
@@ -371,6 +439,9 @@ class GroupGameHandler {
 
     const handledImpostor = await this.handleImpostorFlow({ msg, chat, senderId, command, args, isAdmin, isSupremo });
     if (handledImpostor) return true;
+
+    const handledNamoro = await this.handleNamoroFlow({ msg, chat, senderId, command, args, isAdmin, isSupremo });
+    if (handledNamoro) return true;
 
     if (command === '!user') {
       const mentionedIds = await getMentionedIds(msg);
@@ -430,7 +501,32 @@ class GroupGameHandler {
         }
 
         let playerInfo;
-        if (args.length === 0) {
+        if (game.game_type === 'namoro') {
+          if (args.length === 0) {
+            await msg.reply('❌ No Vai Dar Namoro use: !entrar SEXO (M/F) ou !entrar NUMERO NOME SEXO');
+            return true;
+          }
+
+          if (args.length === 1) {
+            const isFullyRegistered = await this.db.isPlayerFullyRegistered(senderId);
+            if (!isFullyRegistered) {
+              await msg.reply('❌ Cadastro geral incompleto. Use: !entrar NUMERO NOME SEXO');
+              return true;
+            }
+            await this.namoroManager.setGender(senderId, args[0]);
+            playerInfo = await this.manager.registerExistingPlayer(game.id, senderId);
+          } else {
+            if (args.length < 3) {
+              await msg.reply('❌ Formato no Vai Dar Namoro: !entrar NUMERO NOME SEXO');
+              return true;
+            }
+            const number = args[0];
+            const gender = args[args.length - 1];
+            const name = args.slice(1, -1).join(' ');
+            playerInfo = await this.manager.registerPlayer(game.id, senderId, number, name);
+            await this.namoroManager.setGender(senderId, gender);
+          }
+        } else if (args.length === 0) {
           const isFullyRegistered = await this.db.isPlayerFullyRegistered(senderId);
           if (!isFullyRegistered) {
             await msg.reply('❌ Você não tem cadastro geral completo.\nUse: !entrar NUMERO NOME\nEx: !entrar 258866630883 João');
@@ -459,7 +555,7 @@ class GroupGameHandler {
 
         await msg.reply(`✅ ${playerInfo.name} entrou! Posição: ${playerInfo.order}º`);
       } catch (error) {
-        await msg.reply(`❌ ${error.message.includes('já está') || error.message.includes('Número inválido') || error.message.includes('Digite seu nome') ? error.message : 'Erro ao entrar'}`);
+        await msg.reply(`❌ ${error.message || 'Erro ao entrar'}`);
       }
       return true;
     }
@@ -495,6 +591,21 @@ class GroupGameHandler {
         return true;
       }
 
+      if (game.game_type === 'namoro') {
+        const state = await this.namoroManager.getState(groupId, game.id);
+        const players = await this.db.getGamePlayers(game.id);
+        await msg.reply(
+          `💘 *STATUS VAI DAR NAMORO*\n\n` +
+          `🎮 Jogo: #${game.id}\n` +
+          `📍 Fase: ${state?.phase || game.status}\n` +
+          `👥 Jogadores: ${players.length}\n` +
+          `🔥 Lances: ${state?.lanes?.length || 0}\n` +
+          `❤️ Matches totais: ${Object.values(state?.totalMatchesByUser || {}).reduce((acc, n) => acc + n, 0)}\n` +
+          `⏱️ Duração: ${state?.durationMinutes || 10} min`
+        );
+        return true;
+      }
+
       const status = await this.manager.getGameStatus(game.id);
       let statusText = `🎮 *PAREDÃO #${game.id}*\n📊 ${status.statusText}\n👥 ${status.totalPlayers} jogadores\n`;
       if (status.currentPlayer) statusText += `\n🎤 *ATUAL:* ${status.currentPlayer.name}`;
@@ -507,7 +618,7 @@ class GroupGameHandler {
       return true;
     }
 
-    const adminCommands = ['!iniciarparedao', '!sortear', '!comecar', '!proximoturno', '!skipturno', '!encerrarturno', '!forcarentrar', '!adicionar', '!remover', '!finalizar', '!admin', '!removeradmin', '!editarjogador', '!bloquearedicao', '!permitiredicao', '!atualizarparedao', '!clonarjogo'];
+    const adminCommands = ['!iniciarparedao', '!iniciarnamoro', '!sortear', '!comecar', '!proximoturno', '!skipturno', '!encerrarturno', '!forcarentrar', '!adicionar', '!remover', '!finalizar', '!admin', '!removeradmin', '!editarjogador', '!bloquearedicao', '!permitiredicao', '!atualizarparedao', '!clonarjogo'];
     if (!isAdmin && !isSupremo && adminCommands.includes(command)) {
       await msg.reply('❌ Apenas administradores');
       return true;
@@ -728,6 +839,11 @@ class GroupGameHandler {
 
       if (game.game_type === 'impostor') {
         this.impostorManager.clearState(groupId);
+      }
+
+      if (game.game_type === 'namoro') {
+        await this.namoroManager.finishGame({ groupId, chat, reason: 'manual' });
+        return true;
       }
 
       await this.manager.finishGame(game.id, groupId);

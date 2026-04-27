@@ -8,6 +8,11 @@ const GAME_REGISTRY = {
     key: 'impostor',
     name: 'Impostor',
     description: 'Jogo de papéis secretos com partilhas e votação.'
+  },
+  namoro: {
+    key: 'namoro',
+    name: 'Vai Dar Namoro',
+    description: 'Lances no DM e matches por ID para formar casais.'
   }
 };
 
