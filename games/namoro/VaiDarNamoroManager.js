@@ -217,20 +217,41 @@ class VaiDarNamoroManager {
     const chat = await this.client.getChatById(groupId).catch(() => null);
     if (!chat) return;
 
-    const header = `🔥 *Novo lance!*\nID: *#${lane.id}*\nDê match no DM com: *!match ${lane.id}*`;
+    const header = `🔥 Novo lance!\nID: #${lane.id}`;
+    const highlightedContent = `> ${text || '[sem texto]'}`;
+    const matchInstruction = `Dê match no DM com: !match ${lane.id}`;
 
     if (lane.media) {
       if (lane.type === 'sticker') {
         await chat.sendMessage(lane.media);
-        await chat.sendMessage(`${header}\n🧩 Sticker enviado.`);
+        await chat.sendMessage(`${header}\n\n> 🧩 Sticker enviado.\n\n${matchInstruction}`);
         return;
       }
-      const caption = text ? `${header}\n\n📝 ${text}` : header;
+      const caption = `${header}\n\n${highlightedContent}\n\n${matchInstruction}`;
       await chat.sendMessage(lane.media, { caption });
       return;
     }
 
-    await chat.sendMessage(`💬 ${header}\n\n${text || '[sem texto]'}`);
+    await chat.sendMessage(`💬 ${header}\n\n${highlightedContent}\n\n${matchInstruction}`);
+  }
+
+  async announceMatchInGroup({ groupId, lane, matcherId }) {
+    const chat = await this.client.getChatById(groupId).catch(() => null);
+    if (!chat) return;
+
+    const matcher = await this.db.findPlayerByAnyId(matcherId);
+    const owner = await this.db.findPlayerByAnyId(lane.ownerId);
+
+    const matcherName = matcher?.name || matcherId.split('@')[0];
+    const ownerName = owner?.name || lane.ownerId.split('@')[0];
+    const mentions = [matcherId, lane.ownerId];
+
+    await chat.sendMessage(
+      `❤️ Match no lance #${lane.id}!\n` +
+      `@${matcherId.split('@')[0]} (${matcherName}) deu match em @${lane.ownerId.split('@')[0]} (${ownerName}).\n` +
+      `🔥 Total deste lance: ${lane.matchers.length} match${lane.matchers.length === 1 ? '' : 'es'}.`,
+      { mentions }
+    );
   }
 
   async registerMatch({ groupId, senderId, laneIdRaw }) {
@@ -256,6 +277,9 @@ class VaiDarNamoroManager {
     state.totalMatchesByUser[senderId] = (state.totalMatchesByUser[senderId] || 0) + 1;
 
     await this.persistState(groupId, state, 'active');
+    await this.announceMatchInGroup({ groupId, lane, matcherId: senderId }).catch((error) => {
+      console.error('Erro ao anunciar match no grupo:', error.message);
+    });
     await this.checkLiveEvents(groupId, state, lane);
 
     return { laneId: lane.id, countForLane: state.matchCountByPair[key] };
