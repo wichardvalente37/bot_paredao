@@ -306,7 +306,8 @@ class GroupGameHandler {
         await chat.sendMessage(
           `🔒 Grupo trancado para admins durante ${state.durationMinutes} min.\n` +
           `📩 Cada jogador pode mandar quantos lances quiser no meu DM (texto, foto, áudio, sticker).\n` +
-          `❤️ Depois dê match por ID no DM: *!match AMR-001ABC*.`
+          `❤️ Depois dê match por ID no DM: *!match A0*.\n` +
+          `🔎 Para confirmar um lance no DM: *!lance ID*.`
         );
       } catch (error) {
         await msg.reply(`❌ ${error.message}`);
@@ -390,7 +391,7 @@ class GroupGameHandler {
         `💘 *VAI DAR NAMORO*\n` +
         `!iniciarnamoro [min], !encerrarinscricoes, !sexo M/F\n` +
         `!helpnamoro - Guia completo do Vai Dar Namoro\n` +
-        `DM: envie lances e use !match ID\n\n` +
+        `DM: envie lances, use !match ID e !lance ID\n\n` +
         `👮 *ADMIN EXTRA*\n` +
         `!forcarentrar/@adicionar @, !remover @, !admin @, !removeradmin @\n` +
         `!editarjogador @ NUMERO NOME, !bloquearedicao, !permitiredicao, !clonarjogo [tipo] [id]`
@@ -432,12 +433,13 @@ class GroupGameHandler {
         `   • O grupo fica trancado só para admins durante o tempo definido.\n` +
         `5) Durante o jogo, os participantes enviam lances no DM do bot:\n` +
         `   • texto, foto, vídeo, áudio/ptt e sticker\n` +
-        `   • cada lance recebe um ID (ex.: AMR-001ABC)\n` +
+        `   • cada lance recebe um ID curto (ex.: A0, B0, C0)\n` +
         `6) Para dar match, envie no DM: *!match ID*\n` +
-        `   • Exemplo: *!match AMR-001ABC*\n` +
+        `   • Exemplo: *!match A0*\n` +
         `   • Não pode dar match no próprio lance\n` +
         `   • Match permitido apenas entre M e F\n` +
         `   • Limite: 3 matchs por utilizador no mesmo lance\n` +
+        `   • Para rever um lance por ID (inclusive foto/vídeo), use *!lance ID* no DM\n` +
         `7) O bot envia alertas ao vivo (ex.: lance com 10+ matchs) e ranking.\n` +
         `8) Quando o tempo acabar, o jogo finaliza automaticamente e o grupo é restaurado.\n\n` +
         `Extras:\n` +
@@ -609,7 +611,8 @@ class GroupGameHandler {
     }
 
     if (command === '!status') {
-      const game = await this.manager.getActiveGame(groupId, selectedGame);
+      const game = await this.manager.getActiveGame(groupId, selectedGame)
+        || await this.manager.getActiveGame(groupId);
       if (!game) return msg.reply('❌ Nenhum jogo ativo').then(() => true);
 
       if (game.game_type === 'impostor') {
@@ -634,6 +637,9 @@ class GroupGameHandler {
       if (game.game_type === 'namoro') {
         const state = await this.namoroManager.getState(groupId, game.id);
         const players = await this.db.getGamePlayers(game.id);
+        const recentLanes = [...(state?.lanes || [])]
+          .slice(-5)
+          .map((lane) => `#${lane.id} (${lane.type}, ${lane.matchers.length} match${lane.matchers.length === 1 ? '' : 'es'})`);
         await msg.reply(
           `💘 *STATUS VAI DAR NAMORO*\n\n` +
           `🎮 Jogo: #${game.id}\n` +
@@ -641,7 +647,9 @@ class GroupGameHandler {
           `👥 Jogadores: ${players.length}\n` +
           `🔥 Lances: ${state?.lanes?.length || 0}\n` +
           `❤️ Matches totais: ${Object.values(state?.totalMatchesByUser || {}).reduce((acc, n) => acc + n, 0)}\n` +
-          `⏱️ Duração: ${state?.durationMinutes || 10} min`
+          `⏱️ Duração: ${state?.durationMinutes || 10} min\n\n` +
+          `📌 Últimos IDs: ${recentLanes.length ? recentLanes.join(' | ') : 'sem lances ainda'}\n` +
+          `ℹ️ Para ver qualquer lance completo (inclusive mídia), peça no DM: *!lance ID*`
         );
         return true;
       }
