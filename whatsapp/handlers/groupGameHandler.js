@@ -63,8 +63,7 @@ class GroupGameHandler {
       `🧾 Nome: ${profile.name || 'não informado'}\n` +
       `👥 Número do grupo: ${groupNumber}\n` +
       `💬 Número do DM: ${dmNumber}\n` +
-      `🛡️ Admin: ${profile.is_admin ? 'sim' : 'não'}\n` +
-      `👑 Supremo: ${profile.is_supremo ? 'sim' : 'não'}`
+      `🛡️ Admin: ${profile.is_admin ? 'sim' : 'não'}`
     );
   }
 
@@ -309,19 +308,44 @@ class GroupGameHandler {
         `!menujogos - Lista de jogos\n` +
         `!selecionarjogo [paredao|impostor] - Selecionar fluxo\n` +
         `!deselecionarjogo - Voltar para seleção automática\n` +
-        `!entrar [NUMERO NOME] - Entrar no jogo atual\n` +
+        `!entrar [NUMERO NOME] - Entrar no jogo atual (auto-completa 258)\n` +
+        `!adicionar @pessoa [NUMERO NOME] - Admin adiciona/atualiza e entra no jogo\n` +
+        `!editarmeunome NOME - Edita seu nome no cadastro (no grupo)\n` +
+        `!editarmeunumero NUMERO - Edita seu número de DM (no grupo)\n` +
         `!user [@membro] - Ver cadastro geral\n` +
         `!userhis [@membro] - Ver histórico de jogos\n` +
         `!sair - Sair do jogo atual\n` +
         `!status - Status detalhado\n\n` +
         `🎤 *PAREDÃO*\n` +
-        `!iniciarparedao [DURACAO UPDATE], !sortear, !comecar, !proximoturno, !skipturno, !encerrarturno, !finalizar\n` +
+        `!iniciarparedao [DURACAO UPDATE], !sortear, !comecar, !proximoturno, !skipturno, !encerrarturno, !atualizarparedao D U, !finalizar\n` +
+        `!helpparedao - Guia completo do paredão\n` +
         `Exemplo: !iniciarparedao 60 10\n\n` +
         `🕵️ *IMPOSTOR*\n` +
         `!iniciarimpostor, !partilhas N, !encerrarinscricoes\n` +
         `!fala texto (na sua vez), !votar @jogador, !encerrarvotacao\n\n` +
         `👮 *ADMIN EXTRA*\n` +
-        `!forcarentrar @, !remover @, !admin @, !removeradmin @`
+        `!forcarentrar/@adicionar @, !remover @, !admin @, !removeradmin @\n` +
+        `!editarjogador @ NUMERO NOME, !bloquearedicao, !permitiredicao, !clonarjogo [tipo] [id]`
+      );
+      return true;
+    }
+
+    if (command === '!helpparedao') {
+      await msg.reply(
+        `🎤 *HELP PAREDÃO (COMPLETO)*\n\n` +
+        `1) Admin cria: *!iniciarparedao [duração atualização]*\n` +
+        `2) Jogadores entram: *!entrar* (cadastro existente) ou *!entrar NUMERO NOME*\n` +
+        `   • Se mandar só 9 dígitos começando em 82-87, o bot completa com 258.\n` +
+        `3) Admin pode ajustar ordem com *!sortear* (quantas vezes quiser).\n` +
+        `4) Começar: *!comecar* (se não tiver sorteio, o bot sorteia automaticamente).\n` +
+        `5) Durante turno, grupo envia perguntas no DM do bot.\n` +
+        `   • Pergunta anônima: texto normal\n` +
+        `   • Pergunta identificada: começar com #\n` +
+        `6) Pessoa no paredão responde no DM usando *Responder* na pergunta.\n` +
+        `   • Aceita texto, áudio, foto, vídeo e sticker.\n` +
+        `7) Admin controla com: *!encerrarturno*, *!proximoturno*, *!skipturno*.\n` +
+        `8) Fim do jogo: *!finalizar*.\n\n` +
+        `Extras: *!adicionar*, *!remover*, *!atualizarparedao*, *!clonarjogo*`
       );
       return true;
     }
@@ -359,6 +383,36 @@ class GroupGameHandler {
       const mentionedIds = await getMentionedIds(msg);
       const targetId = mentionedIds[0] || senderId;
       await this.sendUserHistory(msg, targetId);
+      return true;
+    }
+
+    if (command === '!editarmeunome' || command === '!editarmeunumero') {
+      if (!this.manager.isSelfEditAllowed(groupId)) {
+        await msg.reply('⛔ Alterações de cadastro estão bloqueadas por um admin.');
+        return true;
+      }
+
+      try {
+        if (command === '!editarmeunome') {
+          const name = args.join(' ').trim();
+          if (name.length < 2) {
+            await msg.reply('❌ Use: !editarmeunome SEU_NOME');
+            return true;
+          }
+          await this.db.updatePlayerProfile(senderId, { name });
+          await msg.reply(`✅ Nome atualizado para: ${name}`);
+        } else {
+          const normalized = this.manager.validatePhoneNumber(args[0] || '');
+          if (!normalized) {
+            await msg.reply('❌ Número inválido. Use 258XXXXXXXXX ou 9 dígitos válidos (82-87).');
+            return true;
+          }
+          await this.db.updatePlayerProfile(senderId, { dmId: `${normalized}@c.us` });
+          await msg.reply(`✅ Número de DM atualizado para: ${normalized}`);
+        }
+      } catch (error) {
+        await msg.reply(`❌ ${error.message}`);
+      }
       return true;
     }
 
@@ -453,7 +507,7 @@ class GroupGameHandler {
       return true;
     }
 
-    const adminCommands = ['!iniciarparedao', '!sortear', '!comecar', '!proximoturno', '!skipturno', '!encerrarturno', '!forcarentrar', '!remover', '!finalizar', '!admin', '!removeradmin'];
+    const adminCommands = ['!iniciarparedao', '!sortear', '!comecar', '!proximoturno', '!skipturno', '!encerrarturno', '!forcarentrar', '!adicionar', '!remover', '!finalizar', '!admin', '!removeradmin', '!editarjogador', '!bloquearedicao', '!permitiredicao', '!atualizarparedao', '!clonarjogo'];
     if (!isAdmin && !isSupremo && adminCommands.includes(command)) {
       await msg.reply('❌ Apenas administradores');
       return true;
@@ -480,6 +534,13 @@ class GroupGameHandler {
         announcement += `🎯 *CONVITE PARA TODOS:*\n${mentionIds.map((id) => `@${id.split('@')[0]}`).join(' ')}\n\n`;
       }
       announcement += `📝 *PARA PARTICIPAR:*\n!entrar (se já cadastrado)\nou\n!entrar NUMERO SEU_NOME\nEx: !entrar 258866630883 João\n\n`;
+      const botContact = this.client.info?.wid?._serialized?.split('@')[0];
+      if (botContact) {
+        announcement += `📩 *Perguntas vão no DM do bot:* ${botContact}\n`;
+      } else {
+        announcement += `📩 *Perguntas vão no meu DM (bot)*\n`;
+      }
+      announcement += `\n`;
       announcement += `⏱️ *Configuração deste jogo:*\n• Turno: ${configured.turnDurationMinutes} min\n• Atualização: ${configured.updateIntervalMinutes} min`;
       await chat.sendMessage(announcement, mentionIds.length > 0 ? { mentions: mentionIds } : undefined);
       await msg.reply(`✅ Paredão #${gameId} iniciado!`);
@@ -501,9 +562,24 @@ class GroupGameHandler {
       if (game.status !== 'waiting') return msg.reply('❌ Jogo já começou!').then(() => true);
       const players = await this.db.getGamePlayers(game.id);
       if (players.length === 0) return msg.reply('❌ Nenhum jogador').then(() => true);
-      const first = players[0];
+      const shuffled = await this.manager.shufflePlayers(game.id);
+      const first = shuffled[0];
+      await chat.sendMessage(`🎲 Ordem sorteada automaticamente antes de começar.`);
       await chat.sendMessage(`🔥 *VAMOS COMEÇAR!*\n\n🎤 Primeiro: @${first.id.split('@')[0]}\n`, { mentions: [first.id] });
       await this.manager.startTurn(game.id, groupId, first);
+      return true;
+    }
+
+    if (command === '!atualizarparedao') {
+      const game = await this.manager.getActiveGame(groupId, 'paredao');
+      if (!game) return msg.reply('❌ Nenhum paredão').then(() => true);
+      try {
+        const parsed = parseTurnSettings(args);
+        const configured = this.manager.configureTurnSettings(groupId, parsed);
+        await msg.reply(`✅ Configuração atualizada: turno ${configured.turnDurationMinutes} min, update ${configured.updateIntervalMinutes} min.`);
+      } catch (error) {
+        await msg.reply(`❌ ${error.message}`);
+      }
       return true;
     }
 
@@ -532,7 +608,7 @@ class GroupGameHandler {
       return true;
     }
 
-    if (command === '!forcarentrar' || command === '!remover' || command === '!admin' || command === '!removeradmin') {
+    if (command === '!forcarentrar' || command === '!adicionar' || command === '!remover' || command === '!admin' || command === '!removeradmin' || command === '!editarjogador') {
       const mentionedIds = await getMentionedIds(msg);
       if (mentionedIds.length === 0) {
         await msg.reply(`❌ Use: ${command} @membro`);
@@ -542,9 +618,18 @@ class GroupGameHandler {
       const game = await this.manager.getActiveGame(groupId, selectedGame);
       if (!game && (command === '!forcarentrar' || command === '!remover')) return msg.reply('❌ Nenhum jogo ativo').then(() => true);
 
-      if (command === '!forcarentrar') {
+      if (command === '!forcarentrar' || command === '!adicionar') {
         try {
           const name = await this.getSafeName(targetId);
+          if (args.length >= 3) {
+            const manualNumber = this.manager.validatePhoneNumber(args[1]);
+            const manualName = args.slice(2).join(' ').trim();
+            if (!manualNumber || manualName.length < 2) {
+              await msg.reply('❌ Use: !adicionar @pessoa NUMERO NOME');
+              return true;
+            }
+            await this.db.registerPlayerWithManualInfo(targetId, `${manualNumber}@c.us`, manualName, false);
+          }
           const playerInfo = await this.manager.forceAddPlayer(game.id, targetId, name);
           await msg.reply(`✅ ${playerInfo.name} adicionado! Posição: ${playerInfo.order}º`);
         } catch (error) {
@@ -583,6 +668,58 @@ class GroupGameHandler {
         );
         return true;
       }
+
+      if (command === '!editarjogador') {
+        const number = this.manager.validatePhoneNumber(args[1] || '');
+        const name = args.slice(2).join(' ').trim();
+        if (!number || name.length < 2) {
+          await msg.reply('❌ Use: !editarjogador @membro NUMERO NOME');
+          return true;
+        }
+        await this.db.updatePlayerProfile(targetId, { dmId: `${number}@c.us`, name });
+        await msg.reply(`✅ Cadastro atualizado para ${name} (${number}).`);
+        return true;
+      }
+    }
+
+    if (command === '!bloquearedicao') {
+      this.manager.setSelfEditAllowed(groupId, false);
+      await msg.reply('🔒 Edição de cadastro dos jogadores bloqueada neste grupo.');
+      return true;
+    }
+
+    if (command === '!permitiredicao') {
+      this.manager.setSelfEditAllowed(groupId, true);
+      await msg.reply('🔓 Edição de cadastro dos jogadores liberada neste grupo.');
+      return true;
+    }
+
+    if (command === '!clonarjogo') {
+      const gameType = (args[0] || selectedGame || 'paredao').toLowerCase();
+      const sourceId = Number.parseInt(args[1], 10);
+      if (!isSupportedGame(gameType)) {
+        await msg.reply('❌ Tipo inválido. Use paredao ou impostor.');
+        return true;
+      }
+      const sourceGame = await this.db.getLatestGameWithPlayers(groupId, gameType, Number.isInteger(sourceId) ? sourceId : null);
+      if (!sourceGame) {
+        await msg.reply('❌ Não encontrei jogo para clonar.');
+        return true;
+      }
+      const sourcePlayers = await this.db.getGamePlayers(sourceGame.id);
+      if (sourcePlayers.length === 0) {
+        await msg.reply('❌ O jogo de origem não tem jogadores.');
+        return true;
+      }
+      const newGameId = gameType === 'impostor'
+        ? await this.impostorManager.createGame(groupId)
+        : await this.manager.createGame(groupId, 'paredao');
+      for (let i = 0; i < sourcePlayers.length; i++) {
+        await this.db.addPlayerToGame(newGameId, sourcePlayers[i].id, i + 1);
+      }
+      await this.setSelectedGame(groupId, gameType);
+      await msg.reply(`✅ Jogo ${gameType.toUpperCase()} #${newGameId} clonado do #${sourceGame.id} com ${sourcePlayers.length} membros.`);
+      return true;
     }
 
     if (command === '!finalizar') {

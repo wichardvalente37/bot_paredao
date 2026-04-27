@@ -10,6 +10,11 @@ class DMHandler {
     const text = normalizeText(msg);
     const player = await this.db.findPlayerByAnyId(senderId);
 
+    if (text.startsWith('!editarmeunome ') || text.startsWith('!editarmeunumero ')) {
+      await msg.reply('ℹ️ Edição de dados foi movida para o grupo. Use !editarmeunome ou !editarmeunumero no grupo do jogo.');
+      return true;
+    }
+
     if (!player) {
       const activeGame = await this.db.query(`
         SELECT g.id, g.group_id FROM games g
@@ -41,7 +46,11 @@ class DMHandler {
       const quotedId = quotedMsg.id?._serialized;
 
       if (quotedId) {
-        const result = await this.manager.processAnswer(senderId, quotedId, text);
+        const hasMedia = msg.hasMedia || msg.type === 'audio' || msg.type === 'ptt' || msg.type === 'image' || msg.type === 'video' || msg.type === 'sticker';
+        const media = hasMedia
+          ? { content: await msg.downloadMedia(), type: msg.type === 'ptt' ? 'audio' : msg.type }
+          : null;
+        const result = await this.manager.processAnswer(senderId, quotedId, text, media);
         if (result.success) {
           await msg.reply('✅ Resposta enviada ao grupo!');
         } else if (result.error) {
