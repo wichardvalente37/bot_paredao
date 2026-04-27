@@ -1,19 +1,33 @@
 FROM node:18
 
-# Pasta de trabalho dentro do container
+# Instalar Chromium e libs necessárias
+RUN apt-get update && apt-get install -y \
+  chromium \
+  fonts-liberation \
+  libappindicator3-1 \
+  libasound2 \
+  libatk-bridge2.0-0 \
+  libatk1.0-0 \
+  libcups2 \
+  libdbus-1-3 \
+  libx11-xcb1 \
+  libxcomposite1 \
+  libxdamage1 \
+  libxrandr2 \
+  xdg-utils \
+  libgbm1 \
+  libnss3 \
+  libxss1 \
+  libgtk-3-0 \
+  && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
-# Copia os arquivos de dependência
 COPY package*.json ./
-
-# Instala dependências
 RUN npm install
 
-# Copia o resto do projeto
 COPY . .
 
-# Porta (opcional, depende do teu app)
-EXPOSE 3000
+ENV CHROME_PATH=/usr/bin/chromium
 
-# Comando para iniciar
-CMD ["npm", "start"]
+CMD ["node", "index.js"]
