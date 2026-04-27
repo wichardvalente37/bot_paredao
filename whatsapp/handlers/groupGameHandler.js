@@ -184,8 +184,7 @@ class GroupGameHandler {
       }
 
       if (!currentGame) {
-        await msg.reply('❌ Nenhum jogo do impostor em preparação.');
-        return true;
+        return false;
       }
 
       try {
@@ -390,6 +389,7 @@ class GroupGameHandler {
         `!fala texto (na sua vez), !votar @jogador, !encerrarvotacao\n\n` +
         `💘 *VAI DAR NAMORO*\n` +
         `!iniciarnamoro [min], !encerrarinscricoes, !sexo M/F\n` +
+        `!helpnamoro - Guia completo do Vai Dar Namoro\n` +
         `DM: envie lances e use !match ID\n\n` +
         `👮 *ADMIN EXTRA*\n` +
         `!forcarentrar/@adicionar @, !remover @, !admin @, !removeradmin @\n` +
@@ -418,6 +418,35 @@ class GroupGameHandler {
       return true;
     }
 
+    if (command === '!helpnamoro') {
+      await msg.reply(
+        `💘 *HELP VAI DAR NAMORO (COMPLETO)*\n\n` +
+        `1) Admin cria o jogo com: *!iniciarnamoro [minutos]*\n` +
+        `   • Exemplo: *!iniciarnamoro 15*\n` +
+        `2) Jogadores entram com:\n` +
+        `   • *!entrar SEXO* (se já tiver cadastro geral completo)\n` +
+        `   • *!entrar NUMERO NOME SEXO* (cadastro + entrada)\n` +
+        `3) Sexo é obrigatório (M/F).\n` +
+        `   • Pode ajustar com: *!sexo M* ou *!sexo F*\n` +
+        `4) Admin fecha inscrições e inicia com: *!encerrarinscricoes*\n` +
+        `   • O grupo fica trancado só para admins durante o tempo definido.\n` +
+        `5) Durante o jogo, os participantes enviam lances no DM do bot:\n` +
+        `   • texto, foto, vídeo, áudio/ptt e sticker\n` +
+        `   • cada lance recebe um ID (ex.: AMR-001ABC)\n` +
+        `6) Para dar match, envie no DM: *!match ID*\n` +
+        `   • Exemplo: *!match AMR-001ABC*\n` +
+        `   • Não pode dar match no próprio lance\n` +
+        `   • Match permitido apenas entre M e F\n` +
+        `   • Limite: 3 matchs por utilizador no mesmo lance\n` +
+        `7) O bot envia alertas ao vivo (ex.: lance com 10+ matchs) e ranking.\n` +
+        `8) Quando o tempo acabar, o jogo finaliza automaticamente e o grupo é restaurado.\n\n` +
+        `Extras:\n` +
+        `• Veja fase/lances com *!status*\n` +
+        `• Use *!finalizar* para encerrar manualmente (admin)`
+      );
+      return true;
+    }
+
     if (command === '!comojogar') {
       await msg.reply(
         `📚 *GUIA RÁPIDO*\n\n` +
@@ -437,11 +466,22 @@ class GroupGameHandler {
     const isAdmin = await this.manager.isAdmin(senderId);
     const isSupremo = await this.manager.isSupremo(senderId);
 
-    const handledImpostor = await this.handleImpostorFlow({ msg, chat, senderId, command, args, isAdmin, isSupremo });
-    if (handledImpostor) return true;
+    if (selectedGame === 'namoro') {
+      const handledNamoro = await this.handleNamoroFlow({ msg, chat, senderId, command, args, isAdmin, isSupremo });
+      if (handledNamoro) return true;
+      const handledImpostor = await this.handleImpostorFlow({ msg, chat, senderId, command, args, isAdmin, isSupremo });
+      if (handledImpostor) return true;
+    } else {
+      const handledImpostor = await this.handleImpostorFlow({ msg, chat, senderId, command, args, isAdmin, isSupremo });
+      if (handledImpostor) return true;
+      const handledNamoro = await this.handleNamoroFlow({ msg, chat, senderId, command, args, isAdmin, isSupremo });
+      if (handledNamoro) return true;
+    }
 
-    const handledNamoro = await this.handleNamoroFlow({ msg, chat, senderId, command, args, isAdmin, isSupremo });
-    if (handledNamoro) return true;
+    if (command === '!encerrarinscricoes') {
+      await msg.reply('❌ Nenhum jogo com inscrições abertas para encerrar (impostor/namoro).');
+      return true;
+    }
 
     if (command === '!user') {
       const mentionedIds = await getMentionedIds(msg);
