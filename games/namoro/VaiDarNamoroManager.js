@@ -156,8 +156,21 @@ class VaiDarNamoroManager {
   }
 
   buildLaneId(counter) {
-    const rand = Math.random().toString(36).slice(2, 5).toUpperCase();
-    return `AMR-${String(counter).padStart(3, '0')}${rand}`;
+    const index = counter - 1;
+    const letter = String.fromCharCode(65 + (index % 26));
+    const number = Math.floor(index / 26) % 10;
+    return `${letter}${number}`;
+  }
+
+  nextLaneId(state) {
+    let tries = 0;
+    while (tries < 260) {
+      state.laneCounter += 1;
+      const candidate = this.buildLaneId(state.laneCounter);
+      if (!state.lanes.some((lane) => lane.id === candidate)) return candidate;
+      tries += 1;
+    }
+    throw new Error('Limite de lances atingido para este jogo.');
   }
 
   detectLaneType(msg, text) {
@@ -177,45 +190,44 @@ class VaiDarNamoroManager {
     const players = await this.db.getGamePlayers(state.gameId);
     if (!players.some((p) => p.id === senderId)) throw new Error('Você não está inscrito neste jogo.');
 
-    state.laneCounter += 1;
-    const laneId = this.buildLaneId(state.laneCounter);
+    const laneId = this.nextLaneId(state);
     const laneType = this.detectLaneType(msg, text);
+    const hasMedia = msg.hasMedia || ['audio', 'ptt', 'image', 'video', 'sticker'].includes(msg.type);
+    const media = hasMedia ? await msg.downloadMedia().catch(() => null) : null;
 
     const lane = {
       id: laneId,
       ownerId: senderId,
       type: laneType,
       text: text || '',
+      media,
       createdAt: Date.now(),
       matchers: []
     };
     state.lanes.push(lane);
     await this.persistState(groupId, state, 'active');
 
-    await this.publishLaneToGroup({ groupId, lane, msg, text });
+    await this.publishLaneToGroup({ groupId, lane, text });
     await this.checkLiveEvents(groupId, state);
 
     return lane;
   }
 
-  async publishLaneToGroup({ groupId, lane, msg, text }) {
+  async publishLaneToGroup({ groupId, lane, text }) {
     const chat = await this.client.getChatById(groupId).catch(() => null);
     if (!chat) return;
 
     const header = `🔥 *Novo lance!*\nID: *#${lane.id}*\nDê match no DM com: *!match ${lane.id}*`;
 
-    if (msg.hasMedia || ['audio', 'ptt', 'image', 'video', 'sticker'].includes(msg.type)) {
-      const media = await msg.downloadMedia().catch(() => null);
-      if (media) {
-        if (lane.type === 'sticker') {
-          await chat.sendMessage(media);
-          await chat.sendMessage(`${header}\n🧩 Sticker enviado.`);
-          return;
-        }
-        const caption = text ? `${header}\n\n📝 ${text}` : header;
-        await chat.sendMessage(media, { caption });
+    if (lane.media) {
+      if (lane.type === 'sticker') {
+        await chat.sendMessage(lane.media);
+        await chat.sendMessage(`${header}\n🧩 Sticker enviado.`);
         return;
       }
+      const caption = text ? `${header}\n\n📝 ${text}` : header;
+      await chat.sendMessage(lane.media, { caption });
+      return;
     }
 
     await chat.sendMessage(`💬 ${header}\n\n${text || '[sem texto]'}`);
@@ -225,7 +237,7 @@ class VaiDarNamoroManager {
     const state = await this.getState(groupId);
     if (!state || state.phase !== 'active') throw new Error('Jogo não está ativo.');
 
-    const laneId = (laneIdRaw || '').replace('#', '').toUpperCase();
+    const laneId = this.normalizeLaneId(laneIdRaw);
     const lane = state.lanes.find((item) => item.id === laneId);
     if (!lane) throw new Error('ID de lance não encontrado.');
     if (lane.ownerId === senderId) throw new Error('Você não pode dar match no seu próprio lance.');
@@ -247,6 +259,32 @@ class VaiDarNamoroManager {
     await this.checkLiveEvents(groupId, state, lane);
 
     return { laneId: lane.id, countForLane: state.matchCountByPair[key] };
+  }
+
+  normalizeLaneId(laneIdRaw = '') {
+    return String(laneIdRaw).trim().replace('#', '').toUpperCase();
+  }
+
+  summarizeLane(lane) {
+    if (!lane) return null;
+    return {
+      id: lane.id,
+      type: lane.type,
+      text: lane.text || '',
+      matchCount: lane.matchers.length,
+      hasMedia: Boolean(lane.media)
+    };
+  }
+
+  async getLaneDetails({ groupId, laneIdRaw }) {
+    const state = await this.getState(groupId);
+    if (!state) throw new Error('Jogo não está ativo.');
+
+    const laneId = this.normalizeLaneId(laneIdRaw);
+    const lane = state.lanes.find((item) => item.id === laneId);
+    if (!lane) throw new Error('ID de lance não encontrado.');
+
+    return lane;
   }
 
   async checkLiveEvents(groupId, state, changedLane = null) {

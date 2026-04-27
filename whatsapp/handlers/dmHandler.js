@@ -29,6 +29,37 @@ class DMHandler {
         return true;
       }
 
+      if (text.startsWith('!lance ')) {
+        try {
+          const laneId = text.split(' ')[1];
+          const lane = await this.namoroManager.getLaneDetails({
+            groupId: namoroGame.group_id,
+            laneIdRaw: laneId
+          });
+          const summary = this.namoroManager.summarizeLane(lane);
+          const dmChat = await msg.getChat();
+          const header =
+            `🔎 *LANCE #${summary.id}*\n` +
+            `🏷️ Tipo: ${summary.type}\n` +
+            `❤️ Matches: ${summary.matchCount}\n` +
+            `📝 Texto: ${summary.text || '[sem texto]'}`;
+
+          if (lane.media) {
+            if (summary.type === 'sticker') {
+              await msg.reply(header);
+              await dmChat.sendMessage(lane.media);
+            } else {
+              await dmChat.sendMessage(lane.media, { caption: header });
+            }
+          } else {
+            await msg.reply(header);
+          }
+        } catch (error) {
+          await msg.reply(`❌ ${error.message}`);
+        }
+        return true;
+      }
+
       const hasPlayableContent = text || msg.hasMedia || ['audio', 'ptt', 'image', 'video', 'sticker'].includes(msg.type);
       if (hasPlayableContent) {
         try {
@@ -38,7 +69,7 @@ class DMHandler {
             msg,
             text
           });
-          await msg.reply(`✅ Lance #${lane.id} registrado!`);
+          await msg.reply(`✅ Lance #${lane.id} registrado! Use *!lance ${lane.id}* para confirmar.`);
         } catch (error) {
           await msg.reply(`❌ ${error.message}`);
         }
