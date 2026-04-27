@@ -64,6 +64,7 @@ class Database {
         name VARCHAR(150) NOT NULL,
         is_admin BOOLEAN DEFAULT false,
         is_supremo BOOLEAN DEFAULT false,
+        gender VARCHAR(10),
         created_at TIMESTAMP DEFAULT NOW()
       );
 
@@ -147,6 +148,7 @@ class Database {
       );
 
       ALTER TABLE games ADD COLUMN IF NOT EXISTS game_type VARCHAR(20) DEFAULT 'paredao';
+      ALTER TABLE players ADD COLUMN IF NOT EXISTS gender VARCHAR(10);
       ALTER TABLE group_settings ALTER COLUMN selected_game DROP NOT NULL;
 
       CREATE INDEX IF NOT EXISTS idx_games_group_status ON games(group_id, status);
@@ -174,7 +176,7 @@ class Database {
 
   async findPlayerByDmId(dmUserId) {
     const result = await this.query(
-      'SELECT id, name FROM players WHERE dm_id = $1 LIMIT 1',
+      'SELECT id, dm_id, name, gender FROM players WHERE dm_id = $1 LIMIT 1',
       [dmUserId]
     );
     return result.rows[0];
@@ -182,7 +184,7 @@ class Database {
 
   async findPlayerByGroupId(groupUserId) {
     const result = await this.query(
-      'SELECT id, dm_id, name FROM players WHERE id = $1 LIMIT 1',
+      'SELECT id, dm_id, name, gender FROM players WHERE id = $1 LIMIT 1',
       [groupUserId]
     );
     return result.rows[0];
@@ -236,6 +238,36 @@ class Database {
     return this.findPlayerByGroupId(player.id);
   }
 
+
+
+  async updatePlayerGender(userId, gender) {
+    const player = await this.findPlayerByAnyId(userId);
+    if (!player) {
+      throw new Error('Jogador não encontrado no cadastro geral.');
+    }
+
+    await this.query('UPDATE players SET gender = $1 WHERE id = $2', [gender, player.id]);
+    return this.findPlayerByGroupId(player.id);
+  }
+
+  async getActiveGameForPlayerByType(userId, gameType) {
+    const player = await this.findPlayerByAnyId(userId);
+    if (!player) return null;
+
+    const res = await this.query(`
+      SELECT g.id, g.group_id, g.game_type, g.status
+      FROM games g
+      JOIN game_players gp ON gp.game_id = g.id
+      WHERE gp.player_id = $1
+        AND g.game_type = $2
+        AND g.status != 'finished'
+      ORDER BY g.id DESC
+      LIMIT 1
+    `, [player.id, gameType]);
+
+    return res.rows[0] || null;
+  }
+
   async getLatestGameWithPlayers(groupId, gameType, fallbackGameId = null) {
     if (fallbackGameId) {
       const byId = await this.query(
@@ -262,7 +294,7 @@ class Database {
     if (!player) return null;
 
     const res = await this.query(`
-      SELECT id, dm_id, name, is_admin, is_supremo, created_at
+      SELECT id, dm_id, name, is_admin, is_supremo, gender, created_at
       FROM players
       WHERE id = $1
       LIMIT 1

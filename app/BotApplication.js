@@ -1,6 +1,7 @@
 const DMHandler = require('../whatsapp/handlers/dmHandler');
 const GroupGameHandler = require('../whatsapp/handlers/groupGameHandler');
 const ImpostorGameManager = require('../games/impostor/ImpostorGameManager');
+const VaiDarNamoroManager = require('../games/namoro/VaiDarNamoroManager');
 const SupremoHandler = require('../whatsapp/handlers/supremoHandler');
 const { normalizeText } = require('../utils/messageUtils');
 
@@ -11,9 +12,10 @@ class BotApplication {
     this.manager = manager;
     this.supremoCommands = supremoCommands;
     this.supremoHandler = new SupremoHandler(supremoCommands);
-    this.dmHandler = new DMHandler({ db, manager });
     this.impostorManager = new ImpostorGameManager({ client, db, manager });
-    this.groupGameHandler = new GroupGameHandler({ client, db, manager, impostorManager: this.impostorManager });
+    this.namoroManager = new VaiDarNamoroManager({ client, db, manager });
+    this.dmHandler = new DMHandler({ db, manager, namoroManager: this.namoroManager });
+    this.groupGameHandler = new GroupGameHandler({ client, db, manager, impostorManager: this.impostorManager, namoroManager: this.namoroManager });
     this.isReady = false;
     this.reconnectAttempts = 0;
     this.maxReconnectDelayMs = 30000;

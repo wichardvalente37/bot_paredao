@@ -1,14 +1,50 @@
 const { normalizeText } = require('../../utils/messageUtils');
 
 class DMHandler {
-  constructor({ db, manager }) {
+  constructor({ db, manager, namoroManager }) {
     this.db = db;
     this.manager = manager;
+    this.namoroManager = namoroManager;
   }
 
   async handle({ msg, senderId }) {
     const text = normalizeText(msg);
     const player = await this.db.findPlayerByAnyId(senderId);
+
+
+    const namoroGame = await this.db.getActiveGameForPlayerByType(senderId, 'namoro');
+    if (namoroGame) {
+      if (text.startsWith('!match ')) {
+        try {
+          const laneId = text.split(' ')[1];
+          const result = await this.namoroManager.registerMatch({
+            groupId: namoroGame.group_id,
+            senderId: player?.id || senderId,
+            laneIdRaw: laneId
+          });
+          await msg.reply(`❤️ Match registrado no lance #${result.laneId} (${result.countForLane}/3 neste lance).`);
+        } catch (error) {
+          await msg.reply(`❌ ${error.message}`);
+        }
+        return true;
+      }
+
+      const hasPlayableContent = text || msg.hasMedia || ['audio', 'ptt', 'image', 'video', 'sticker'].includes(msg.type);
+      if (hasPlayableContent) {
+        try {
+          const lane = await this.namoroManager.submitLane({
+            groupId: namoroGame.group_id,
+            senderId: player?.id || senderId,
+            msg,
+            text
+          });
+          await msg.reply(`✅ Lance #${lane.id} registrado!`);
+        } catch (error) {
+          await msg.reply(`❌ ${error.message}`);
+        }
+        return true;
+      }
+    }
 
     if (text.startsWith('!editarmeunome ') || text.startsWith('!editarmeunumero ')) {
       await msg.reply('ℹ️ Edição de dados foi movida para o grupo. Use !editarmeunome ou !editarmeunumero no grupo do jogo.');
