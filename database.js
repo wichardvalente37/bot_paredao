@@ -217,6 +217,46 @@ class Database {
     console.log(`👤 Registrado: ${name} (${groupUserId} ↔ ${dmUserId})`);
   }
 
+  async updatePlayerProfile(userId, { dmId = null, name = null } = {}) {
+    const player = await this.findPlayerByAnyId(userId);
+    if (!player) {
+      throw new Error('Jogador não encontrado no cadastro geral.');
+    }
+
+    const finalDmId = dmId || player.dm_id;
+    const finalName = name || player.name;
+
+    await this.query(`
+      UPDATE players
+      SET dm_id = $1,
+          name = $2
+      WHERE id = $3
+    `, [finalDmId, finalName, player.id]);
+
+    return this.findPlayerByGroupId(player.id);
+  }
+
+  async getLatestGameWithPlayers(groupId, gameType, fallbackGameId = null) {
+    if (fallbackGameId) {
+      const byId = await this.query(
+        'SELECT * FROM games WHERE id = $1 AND group_id = $2 LIMIT 1',
+        [fallbackGameId, groupId]
+      );
+      return byId.rows[0] || null;
+    }
+
+    const res = await this.query(
+      `SELECT g.* FROM games g
+       JOIN game_players gp ON gp.game_id = g.id
+       WHERE g.group_id = $1 AND g.game_type = $2
+       GROUP BY g.id
+       ORDER BY g.id DESC
+       LIMIT 1`,
+      [groupId, gameType]
+    );
+    return res.rows[0] || null;
+  }
+
   async getPlayerRegistrationProfile(userId) {
     const player = await this.findPlayerByAnyId(userId);
     if (!player) return null;

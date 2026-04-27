@@ -7,6 +7,7 @@ class GameManager {
     this.timers = new Map();
     this.activeTurns = new Map();
     this.turnSettingsByGroup = new Map();
+    this.selfEditByGroup = new Map();
     this.SUPREMO_ID = process.env.SUPREMO_ID || '';
     this.SUPREMO_GROUP_ID = process.env.SUPREMO_GROUP_ID || '';
     this.TURN_DURATION = PAREDAO_DEFAULTS.turnDurationMinutes;
@@ -29,9 +30,24 @@ class GameManager {
     return merged;
   }
 
+  isSelfEditAllowed(groupId) {
+    return this.selfEditByGroup.get(groupId) !== false;
+  }
+
+  setSelfEditAllowed(groupId, allowed) {
+    this.selfEditByGroup.set(groupId, Boolean(allowed));
+  }
+
   validatePhoneNumber(number) {
     const clean = number.replace(/\D/g, '');
-    return clean.length === 12 ? clean : null;
+    if (clean.length === 12) return clean;
+    if (
+      clean.length === 9 &&
+      ['82', '83', '84', '85', '86', '87'].some((prefix) => clean.startsWith(prefix))
+    ) {
+      return `258${clean}`;
+    }
+    return null;
   }
 
   async createGame(groupId, gameType = 'paredao') {
@@ -95,9 +111,13 @@ class GameManager {
     const dmUserId = `${cleanNumber}@c.us`;
     const name = playerName.trim();
     
-    await db.registerPlayerWithManualInfo(groupUserId, dmUserId, name, false);
-    
     const players = await db.getGamePlayers(gameId);
+    if (players.some((p) => p.id === groupUserId)) {
+      throw new Error('Você já está neste jogo. Use !sair para sair antes de entrar novamente.');
+    }
+
+    await db.registerPlayerWithManualInfo(groupUserId, dmUserId, name, false);
+
     const nextOrder = players.length + 1;
     await db.addPlayerToGame(gameId, groupUserId, nextOrder);
     
@@ -122,6 +142,10 @@ class GameManager {
     }
 
     const players = await db.getGamePlayers(gameId);
+    if (players.some((p) => p.id === groupUserId)) {
+      throw new Error('Você já está neste jogo.');
+    }
+
     const nextOrder = players.length + 1;
     await db.addPlayerToGame(gameId, groupUserId, nextOrder);
 
@@ -142,6 +166,10 @@ class GameManager {
     }
     
     const players = await db.getGamePlayers(gameId);
+    if (players.some((p) => p.id === groupUserId)) {
+      throw new Error('Este jogador já está no jogo.');
+    }
+
     const nextOrder = players.length + 1;
     await db.addPlayerToGame(gameId, groupUserId, nextOrder);
     
@@ -779,7 +807,7 @@ class GameManager {
     }
   }
 
-  async processAnswer(fromId, quotedMsgId, answerText) {
+  async processAnswer(fromId, quotedMsgId, answerText, media = null) {
     console.log(`💬 Tentativa de resposta de ${fromId}`);
     
     const question = await db.getQuestionByDmMessageId(quotedMsgId);
@@ -822,9 +850,10 @@ class GameManager {
       return { error: '❌ Esta pergunta já foi respondida.' };
     }
     
-    await db.saveAnswer(question.id, answerText);
+    const answerLabel = media ? `[resposta em ${media.type}]` : answerText;
+    await db.saveAnswer(question.id, answerLabel);
     
-    const success = await this.publishAnswerToGroup(question, answerText);
+    const success = await this.publishAnswerToGroup(question, answerText, media);
     
     if (success) {
       const turnData = this.activeTurns.get(player.id);
@@ -840,7 +869,7 @@ class GameManager {
     }
   }
 
-  async publishAnswerToGroup(question, answerText) {
+  async publishAnswerToGroup(question, answerText, media = null) {
     try {
       const game = await db.query('SELECT group_id FROM games WHERE id = $1', [question.game_id]);
       if (!game.rows[0]) return false;
@@ -850,10 +879,18 @@ class GameManager {
       
       const formattedMessage = `🎤 *${player?.name || 'Jogador'} responde:*\n\n` +
         `> ${question.question_text}\n\n` +
-        `${answerText}`;
+        `${answerText || '(resposta em mídia)'}`;
       
       const groupChat = await this.client.getChatById(groupId);
-      const sentMsg = await groupChat.sendMessage(formattedMessage);
+      let sentMsg;
+      if (media?.content) {
+        sentMsg = await groupChat.sendMessage(media.content, {
+          caption: formattedMessage,
+          sendAudioAsVoice: media.type === 'audio'
+        });
+      } else {
+        sentMsg = await groupChat.sendMessage(formattedMessage);
+      }
       
       if (sentMsg?.id?._serialized) {
         await db.query(
