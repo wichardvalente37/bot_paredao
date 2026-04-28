@@ -30,7 +30,10 @@ Esta arquitetura foi consolidada para manter os jogos isolados, o core enxuto e 
   - `impostorWords.js`: banco de palavras do Impostor.
 
 - `whatsapp/handlers/`
-  - handlers por canal/contexto (`groupGameHandler`, `dmHandler`, `supremoHandler`).
+  - handlers por canal/contexto (`groupGameHandler`, `dmHandler`, `supremoHandler`, `mediaCommandHandler`).
+
+- `media/`
+  - `MediaDownloadService.js`: integração com yt-dlp/ffmpeg, busca, download e fallback por link temporário.
 
 - `utils/`
   - `messageUtils.js`: normalização de mensagem e resolução de menções.

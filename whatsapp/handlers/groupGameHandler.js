@@ -392,6 +392,10 @@ class GroupGameHandler {
         `!iniciarnamoro [min], !encerrarinscricoes, !sexo M/F\n` +
         `!helpnamoro - Guia completo do Vai Dar Namoro\n` +
         `DM: envie lances, use !match ID e !lance ID\n\n` +
+        `🎵 *MÍDIA (YT-DLP)*\n` +
+        `!mp3 NOME, !mp4 NOME, !buscar TEXTO\n` +
+        `!link URL [mp3|mp4], !musichelp\n` +
+        `Se passar de ~16MB, o bot envia link temporário.\n\n` +
         `👮 *ADMIN EXTRA*\n` +
         `!forcarentrar/@adicionar @, !remover @, !admin @, !removeradmin @\n` +
         `!editarjogador @ NUMERO NOME, !bloquearedicao, !permitiredicao, !clonarjogo [tipo] [id]`

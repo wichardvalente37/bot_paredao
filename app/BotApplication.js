@@ -4,6 +4,7 @@ const ImpostorGameManager = require('../games/impostor/ImpostorGameManager');
 const VaiDarNamoroManager = require('../games/namoro/VaiDarNamoroManager');
 const SupremoHandler = require('../whatsapp/handlers/supremoHandler');
 const { normalizeText } = require('../utils/messageUtils');
+const MediaCommandHandler = require('../whatsapp/handlers/mediaCommandHandler');
 
 class BotApplication {
   constructor({ client, db, manager, supremoCommands }) {
@@ -15,6 +16,7 @@ class BotApplication {
     this.impostorManager = new ImpostorGameManager({ client, db, manager });
     this.namoroManager = new VaiDarNamoroManager({ client, db, manager });
     this.dmHandler = new DMHandler({ db, manager, namoroManager: this.namoroManager });
+    this.mediaCommandHandler = new MediaCommandHandler();
     this.groupGameHandler = new GroupGameHandler({ client, db, manager, impostorManager: this.impostorManager, namoroManager: this.namoroManager });
     this.isReady = false;
     this.reconnectAttempts = 0;
@@ -107,13 +109,20 @@ class BotApplication {
       const args = text.split(' ').slice(1);
 
       if (!chat.isGroup) {
-        await this.dmHandler.handle({ msg, senderId });
+        await this.withProcessingTyping(chat, async () => {
+          const handledByMedia = await this.mediaCommandHandler.tryHandle({ msg, command, args, text });
+          if (handledByMedia) return;
+          await this.dmHandler.handle({ msg, senderId });
+        });
         return;
       }
 
       if (!text.startsWith('!')) return;
 
       await this.withProcessingTyping(chat, async () => {
+        const handledByMedia = await this.mediaCommandHandler.tryHandle({ msg, command, args, text });
+        if (handledByMedia) return;
+
         const handledBySupremo = await this.supremoHandler.tryHandle({ chat, senderId, command, msg, args });
         if (handledBySupremo) return;
 
