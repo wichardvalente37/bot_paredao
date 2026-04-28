@@ -10,6 +10,9 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const BotApplication = require('./app/BotApplication');
+const MediaDownloadService = require('./media/MediaDownloadService');
+
+const mediaDownloadService = new MediaDownloadService();
 
 const qrState = {
   dataUrl: null,
@@ -153,6 +156,28 @@ function startHealthServer() {
     if (req.url === '/qr/status') {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
       res.end(JSON.stringify(getQrStatusPayload()));
+      return;
+    }
+
+    if (req.url?.startsWith('/media/')) {
+      const fileName = decodeURIComponent(req.url.replace('/media/', '').split('?')[0]);
+      const filePath = path.join(mediaDownloadService.getMediaDirectory(), fileName);
+
+      if (!fs.existsSync(filePath)) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'media_not_found' }));
+        return;
+      }
+
+      const stat = fs.statSync(filePath);
+      const ext = path.extname(filePath).toLowerCase();
+      const contentType = ext === '.mp3' ? 'audio/mpeg' : ext === '.mp4' ? 'video/mp4' : 'application/octet-stream';
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        'Content-Length': stat.size,
+        'Content-Disposition': `attachment; filename="${path.basename(filePath)}"`,
+      });
+      fs.createReadStream(filePath).pipe(res);
       return;
     }
 
