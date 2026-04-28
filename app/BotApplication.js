@@ -73,6 +73,29 @@ class BotApplication {
     });
   }
 
+
+  async withProcessingTyping(chat, action) {
+    if (typeof action !== 'function') return false;
+
+    const canType = typeof chat?.sendStateTyping === 'function';
+    const canClear = typeof chat?.clearState === 'function';
+    let typingInterval = null;
+
+    try {
+      if (canType) {
+        await chat.sendStateTyping().catch(() => null);
+        typingInterval = setInterval(() => {
+          chat.sendStateTyping().catch(() => null);
+        }, 4000);
+      }
+
+      return await action();
+    } finally {
+      if (typingInterval) clearInterval(typingInterval);
+      if (canClear) await chat.clearState().catch(() => null);
+    }
+  }
+
   async handleMessage(msg) {
     if (!this.isReady || msg.fromMe) return;
 
@@ -90,20 +113,22 @@ class BotApplication {
 
       if (!text.startsWith('!')) return;
 
-      const handledBySupremo = await this.supremoHandler.tryHandle({ chat, senderId, command, msg, args });
-      if (handledBySupremo) return;
+      await this.withProcessingTyping(chat, async () => {
+        const handledBySupremo = await this.supremoHandler.tryHandle({ chat, senderId, command, msg, args });
+        if (handledBySupremo) return;
 
-      const handledByGame = await this.groupGameHandler.handle({
-        msg,
-        chat,
-        senderId,
-        command,
-        args,
+        const handledByGame = await this.groupGameHandler.handle({
+          msg,
+          chat,
+          senderId,
+          command,
+          args,
+        });
+
+        if (!handledByGame) {
+          await msg.reply('❌ Comando não reconhecido. Use !comandos');
+        }
       });
-
-      if (!handledByGame) {
-        await msg.reply('❌ Comando não reconhecido. Use !comandos');
-      }
     } catch (error) {
       console.error('❌ Erro no roteamento:', error);
       await msg.reply('❌ Ocorreu um erro').catch(() => null);
