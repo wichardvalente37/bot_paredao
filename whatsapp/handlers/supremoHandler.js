@@ -161,6 +161,11 @@ class SupremoHandler {
       return true;
     }
 
+    if (command === '!apresente-se') {
+      await this.supremoCommands.introduceBot(chat);
+      return true;
+    }
+
     if (command === '!voteban') {
       if (mentionedIds.length > 0) {
         await this.supremoCommands.fakeVoteBan(chat, senderId, mentionedIds[0]);
