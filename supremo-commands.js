@@ -85,7 +85,8 @@ class SupremoCommands {
       `!pegadinha @membro - Pegadinha do Supremo\n` +
       `!fakeerror - Simular erro do sistema\n` +
       `!announce - Anúncio dramático\n` +
-      `!saudar - Saudação imperial do grupo\n` +
+      `!saudar - Saudação divertida do grupo\n` +
+      `!apresente-se - O bot se apresenta para o grupo\n` +
       `!voteban @membro - Falsa votação para ban\n\n` +
       `📊 *COMANDOS ÚTEIS:*\n` +
       `!listasubordinados - Listar todos no grupo\n` +
@@ -96,29 +97,49 @@ class SupremoCommands {
     await chat.sendMessage(helpText);
   }
 
+  async simulateTyping(chat, delayMs = 1200) {
+    if (typeof chat.sendStateTyping === 'function') {
+      await chat.sendStateTyping().catch(() => null);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+
+    if (typeof chat.clearState === 'function') {
+      await chat.clearState().catch(() => null);
+    }
+  }
+
   async greetRoyal(chat, senderId) {
     const isSupremo = await this.isSupremo(senderId);
     if (!isSupremo) {
-      await chat.sendMessage('❌ Apenas o SUPREMO pode iniciar a saudação imperial.');
+      await chat.sendMessage('❌ Apenas o SUPREMO pode usar o !saudar.');
       return;
     }
 
-    const participants = chat.participants || [];
-    const mentionIds = participants
-      .map((p) => p.id?._serialized)
-      .filter((id) => id && !id.includes('@bot'));
+    const greetings = [
+      '👑 *SAUDAÇÃO DO SUPREMO* 👑\n\nSalve, pessoal! Passando para mandar energia boa e manter o grupo no clima certo. 😎',
+      '👑 *SAUDAÇÃO DO SUPREMO* 👑\n\nOlá, equipa! Que a conversa renda, os jogos fluam e o caos seja controlado. 🎮',
+      '👑 *SAUDAÇÃO DO SUPREMO* 👑\n\nFala, malta! Vim deixar uma saudação rápida e lembrar: aqui é diversão com respeito. ✨',
+      '👑 *SAUDAÇÃO DO SUPREMO* 👑\n\nE aí, grupo! Boa continuação para todo mundo — sem stress e com boas risadas. 😄'
+    ];
 
-    const mentionText = mentionIds.length
-      ? mentionIds.map((id) => `@${id.split('@')[0]}`).join(' ')
-      : 'pessoal';
+    await this.simulateTyping(chat, 1000);
+    const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
+    await chat.sendMessage(randomGreeting);
+  }
 
-    await chat.sendMessage(
-      `👑 *SAUDAÇÃO IMPERIAL* 👑\n\n` +
-      `Salve, ${mentionText}!\n` +
-      `O SUPREMO deseja um dia lendário para todos.\n` +
-      `⚡ Disciplina, diversão e respeito no grupo!`,
-      mentionIds.length ? { mentions: mentionIds } : undefined
-    );
+  async introduceBot(chat) {
+    const introMessage =
+      `🤖 *APRESENTAÇÃO DO BOT* 🤖\n\n` +
+      `Olá, pessoal! Eu sou o assistente oficial do grupo, criado pelo *SUPREMO* para manter a diversão em alta.\n\n` +
+      `🎮 O que eu faço por aqui:\n` +
+      `- Organizo jogos e dinâmicas\n` +
+      `- Ajudo com comandos e interações\n` +
+      `- Trago caos controlado, sarcasmo e entretenimento\n\n` +
+      `📌 Dica rápida: use *!comandos* para ver tudo o que posso fazer.`;
+
+    await this.simulateTyping(chat, 3000);
+    await chat.sendMessage(introMessage);
   }
 
   // Comando de ban com contagem regressiva
@@ -649,11 +670,10 @@ class SupremoCommands {
 
       await chat.sendMessage(
         `👑 *BOAS-VINDAS DO SUPREMO* 👑\n\n` +
-        `${mention}, seja bem-vindo(a), ${name}.\n` +
-        `📜 Regras simples:\n` +
-        `1) Respeite o trono\n` +
-        `2) Use !comandos para jogar\n` +
-        `3) Não tente tomar meu lugar 😌`,
+        `${mention}, seja bem-vindo(a), ${name}!\n` +
+        `🎉 Aqui a ideia é simples: divertir, jogar e trocar boas vibes.\n` +
+        `📌 Comece com *!comandos* para conhecer as brincadeiras disponíveis.\n` +
+        `😏 E sim, o sarcasmo da casa continua ativo.`,
         contact ? { mentions: [memberId] } : undefined
       );
     } catch (error) {
