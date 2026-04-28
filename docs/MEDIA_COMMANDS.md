@@ -5,9 +5,9 @@ Este bot agora suporta download de música/vídeo por comandos no grupo **e no D
 ## Novos comandos
 
 - `!mp3 Nome da música`
-  - Busca com `ytsearch1:` e baixa em MP3.
+  - Faz prévia do primeiro resultado (`ytsearch1:`), incluindo título/link/thumbnail, e gera um ID para confirmação.
 - `!mp4 Nome da música`
-  - Busca com `ytsearch1:` e baixa em MP4 na melhor qualidade possível.
+  - Faz prévia do primeiro resultado (`ytsearch1:`), incluindo título/link/thumbnail, e gera um ID para confirmação.
 - `!link URL`
   - Baixa da URL informada (modo automático: tenta MP4 e fallback para MP3).
 - `!link URL mp3`
@@ -16,6 +16,12 @@ Este bot agora suporta download de música/vídeo por comandos no grupo **e no D
   - Força vídeo MP4.
 - `!buscar texto`
   - Lista 5 resultados de busca (título + URL), sem baixar.
+- `!busca texto`
+  - Alias de `!buscar`.
+- `!confirmar ID`
+  - Confirma o download pendente (válido por 10 minutos).
+- `!cancelar ID`
+  - Cancela um download pendente.
 - `!musichelp`
   - Exibe ajuda rápida dos comandos de mídia.
 
