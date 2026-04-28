@@ -68,6 +68,33 @@ class MediaDownloadService {
     return results.slice(0, limit);
   }
 
+  async getTopResultDetails(query) {
+    const lines = await this.runYtDlp([
+      '--dump-single-json',
+      '--no-warnings',
+      '--no-playlist',
+      `ytsearch1:${query}`,
+    ], 60_000);
+
+    const raw = lines.join('\n');
+    let item;
+    try {
+      item = JSON.parse(raw);
+    } catch {
+      throw new Error('Não consegui interpretar o resultado da busca.');
+    }
+
+    const durationSec = Number.isFinite(item.duration) ? item.duration : null;
+    return {
+      id: item.id || null,
+      title: item.title || item.fulltitle || 'Sem título',
+      url: item.webpage_url || (item.id ? `https://www.youtube.com/watch?v=${item.id}` : null),
+      durationSec,
+      uploader: item.uploader || item.channel || null,
+      thumbnail: item.thumbnail || null,
+    };
+  }
+
   async downloadFromQuery(query, format) {
     const target = `ytsearch1:${query}`;
     return this.downloadTarget(target, format);

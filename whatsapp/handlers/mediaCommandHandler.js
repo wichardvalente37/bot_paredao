@@ -5,10 +5,11 @@ const MediaDownloadService = require('../../media/MediaDownloadService');
 class MediaCommandHandler {
   constructor() {
     this.mediaService = new MediaDownloadService();
+    this.pendingDownloads = new Map();
   }
 
   isMediaCommand(command) {
-    return ['!mp3', '!mp4', '!link', '!buscar', '!musichelp'].includes(command);
+    return ['!mp3', '!mp4', '!link', '!buscar', '!busca', '!confirmar', '!cancelar', '!musichelp'].includes(command);
   }
 
   async tryHandle({ msg, command, args, text }) {
@@ -22,13 +23,16 @@ class MediaCommandHandler {
         `• *!link URL* → baixa da URL (auto: tenta mp4 e fallback mp3)\n` +
         `• *!link URL mp3* → força áudio MP3\n` +
         `• *!link URL mp4* → força vídeo MP4\n` +
-        `• *!buscar texto* → lista os 5 primeiros resultados sem baixar`
+        `• *!buscar*/*!busca texto* → lista os 5 primeiros resultados sem baixar\n` +
+        `• *!mp3 Nome* → prepara download e pede confirmação\n` +
+        `• *!confirmar ID* → confirma download pendente\n` +
+        `• *!cancelar ID* → cancela download pendente`
       );
       return true;
     }
 
     try {
-      if (command === '!buscar') {
+      if (command === '!buscar' || command === '!busca') {
         const query = args.join(' ').trim();
         if (!query) {
           await msg.reply('❌ Use: *!buscar texto da música*');
@@ -59,8 +63,58 @@ class MediaCommandHandler {
         }
 
         const format = command === '!mp3' ? 'mp3' : 'mp4';
-        await msg.reply(`⏳ Processando *${format.toUpperCase()}* para: ${query}`);
-        const download = await this.mediaService.downloadFromQuery(query, format);
+        const details = await this.mediaService.getTopResultDetails(query);
+        const requestId = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+        const key = await this.buildPendingKey(msg, requestId);
+        this.pendingDownloads.set(key, {
+          query,
+          format,
+          createdAt: Date.now(),
+        });
+
+        await msg.reply(
+          `🎯 *Prévia do download*\n` +
+          `🆔 ID: *${requestId}*\n` +
+          `🎬 ${details.title}\n` +
+          `${details.uploader ? `📺 ${details.uploader}\n` : ''}` +
+          `${details.durationSec ? `⏱️ ${this.formatDuration(details.durationSec)}\n` : ''}` +
+          `${details.url ? `🔗 ${details.url}\n` : ''}` +
+          `${details.thumbnail ? `🖼️ Thumbnail: ${details.thumbnail}\n` : ''}\n` +
+          `✅ Para baixar: *!confirmar ${requestId}*\n` +
+          `❌ Para cancelar: *!cancelar ${requestId}*`
+        );
+        return true;
+      }
+
+      if (command === '!confirmar' || command === '!cancelar') {
+        const requestId = (args[0] || '').trim();
+        if (!requestId) {
+          await msg.reply(`❌ Use: *${command} ID*`);
+          return true;
+        }
+
+        const key = await this.buildPendingKey(msg, requestId);
+        const pending = this.pendingDownloads.get(key);
+        if (!pending) {
+          await msg.reply('❌ ID não encontrado ou expirado.');
+          return true;
+        }
+
+        if (Date.now() - pending.createdAt > 10 * 60 * 1000) {
+          this.pendingDownloads.delete(key);
+          await msg.reply('⌛ Esse pedido expirou (10 min). Faça um novo comando.');
+          return true;
+        }
+
+        if (command === '!cancelar') {
+          this.pendingDownloads.delete(key);
+          await msg.reply(`✅ Download *${requestId}* cancelado.`);
+          return true;
+        }
+
+        this.pendingDownloads.delete(key);
+        await msg.reply(`⏳ Processando *${pending.format.toUpperCase()}* para: ${pending.query}`);
+        const download = await this.mediaService.downloadFromQuery(pending.query, pending.format);
         await this.sendDownloadedMedia(msg, download);
         return true;
       }
@@ -87,6 +141,20 @@ class MediaCommandHandler {
     }
 
     return false;
+  }
+
+  async buildPendingKey(msg, requestId) {
+    const chat = await msg.getChat();
+    return `${chat.id._serialized}:${requestId}`;
+  }
+
+  formatDuration(seconds) {
+    const total = Math.max(0, Math.floor(seconds));
+    const hh = Math.floor(total / 3600);
+    const mm = Math.floor((total % 3600) / 60);
+    const ss = total % 60;
+    if (hh > 0) return `${hh}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+    return `${mm}:${String(ss).padStart(2, '0')}`;
   }
 
   async sendDownloadedMedia(msg, download) {
