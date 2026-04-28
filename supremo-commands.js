@@ -435,9 +435,9 @@ class SupremoCommands {
       // Contagem regressiva com mensagens sarcásticas
       const messages = [
         { time: 10, msg: "🔟 *10 segundos* - Ainda pode pedir perdão... (não que vá adiantar)" },
-        { time: 9, msg: "9️⃣ *9 segundos* - Revisando seus pecados no grupo..." },
+        { time: 9, msg: "9️⃣ *9 segundos* - Vasculhando seu histórico de confusões no grupo..." },
         { time: 8, msg: "8️⃣ *8 segundos* - Calculando nível de arrependimento: 0%" },
-        { time: 7, msg: "7️⃣ *7 segundos* - Consultando os deuses do WhatsApp: APROVADO ✅" },
+        { time: 7, msg: "7️⃣ *7 segundos* - Consultando o comitê da zoeira: APROVADO ✅" },
         { time: 6, msg: "6️⃣ *6 segundos* - Preparando a catapulta do ban..." },
         { time: 5, msg: "5️⃣ *5 segundos* - *Última chamada para o choro!* 😭" },
         { time: 4, msg: "4️⃣ *4 segundos* - 🎵 Adeus, adeus, faaaarewell... 🎵" },
@@ -549,7 +549,7 @@ class SupremoCommands {
       "Monarca Absoluto",
       "Imperador do WhatsApp",
       "Rei dos Bans",
-      "Deus do Grupo"
+      "Lenda do Grupo"
     ];
 
     const randomTitle = sarcasticTitles[Math.floor(Math.random() * sarcasticTitles.length)];
@@ -616,7 +616,7 @@ class SupremoCommands {
       );
     } catch (error) {
       console.error('Erro ao conceder poder:', error);
-      await chat.sendMessage('❌ Falha ao conceder poder. Talvez os deuses do WhatsApp estejam de folga.');
+      await chat.sendMessage('❌ Falha ao conceder poder. Talvez a central da zoeira esteja de folga.');
     }
   }
 
