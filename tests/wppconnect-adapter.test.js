@@ -3,11 +3,17 @@ const WppConnectAdapter = require('../whatsapp/WppConnectAdapter');
 
 function createRawClientStub() {
   return {
+    listCall: null,
     onMessage(handler) { this._onMessage = handler; },
     onStateChange(handler) { this._onStateChange = handler; },
+    onIncomingCall(handler) { this._onIncomingCall = handler; },
+    onAck(handler) { this._onAck = handler; },
+    useHere: async () => true,
     sendText: async (to, text) => ({ to, text }),
     sendMentioned: async (to, text, mentions) => ({ to, text, mentions }),
-    sendListMessage: async () => true,
+    sendListMessage: async function(to, payload) { this.listCall = { to, payload }; return true; },
+    sendButtons: async (to, text, buttons) => ({ to, text, buttons }),
+    sendPoll: async (to, name, options, selectableCount) => ({ to, name, options, selectableCount }),
     getGroupMembers: async () => ([{ id: '111@c.us', isAdmin: true }, { id: '222@c.us', isSuperAdmin: true }]),
     getContact: async (id) => ({ id, name: 'Nome' }),
     close: async () => true,
@@ -37,6 +43,12 @@ async function run() {
 
   const mentionResponse = await chat.sendMessage('oi', { mentions: ['111@c.us'] });
   assert.deepEqual(mentionResponse.mentions, ['111@c.us']);
+
+  await chat.sendListMessage('t', [{ title: 's', rows: [] }], 'btn', 'desc', 'footer');
+  assert.ok(Array.isArray(raw.listCall.payload.sections));
+
+  const poll = await chat.sendPoll('Pergunta', ['A', 'B'], 1);
+  assert.equal(poll.name, 'Pergunta');
 
   const contact = await adapter.getContactById('999@c.us');
   assert.equal(contact.name, 'Nome');

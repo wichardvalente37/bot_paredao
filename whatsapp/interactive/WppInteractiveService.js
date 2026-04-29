@@ -34,6 +34,11 @@ class WppInteractiveService {
     ];
 
     if (typeof chat.sendListMessage === 'function') {
+      if (!Array.isArray(sections)) {
+        await msg.reply('⚠️ Falha ao montar menu interativo (sections inválido).');
+        return true;
+      }
+
       await chat.sendListMessage(
         '🎛️ *Painel Interativo Maestro*\nEscolha uma ação para executar sem digitar comandos.',
         sections,
