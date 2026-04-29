@@ -13,6 +13,32 @@ class MediaCommandHandler {
     return ['!mp3', '!mp4', '!link', '!buscar', '!busca', '!cancelar', '!maxdownload', '!musichelp'].includes(command);
   }
 
+  buildPreviewThumbnailCandidates(details) {
+    const candidates = [];
+    if (details?.thumbnail) candidates.push(details.thumbnail);
+    if (details?.id) {
+      candidates.push(`https://i.ytimg.com/vi/${details.id}/maxresdefault.jpg`);
+      candidates.push(`https://i.ytimg.com/vi/${details.id}/hqdefault.jpg`);
+    }
+    return [...new Set(candidates.filter(Boolean))];
+  }
+
+  async sendPreviewWithThumbnail(chat, msg, details, previewCaption) {
+    const thumbnailUrls = this.buildPreviewThumbnailCandidates(details);
+    for (const url of thumbnailUrls) {
+      try {
+        const thumb = await MessageMedia.fromUrl(url, { unsafeMime: true });
+        await chat.sendMessage(thumb, { caption: previewCaption });
+        return true;
+      } catch (error) {
+        console.warn(`⚠️ Falha ao enviar thumbnail de prévia (${url}):`, error.message);
+      }
+    }
+
+    await msg.reply(previewCaption);
+    return false;
+  }
+
   async tryHandle({ msg, command, args, text }) {
     if (!this.isMediaCommand(command)) return false;
 
@@ -97,12 +123,7 @@ class MediaCommandHandler {
           `\n⏬ Download iniciado automaticamente.\n` +
           `❌ Para cancelar: *!cancelar ${requestId}*`;
 
-        if (details.thumbnail) {
-          const thumb = await MessageMedia.fromUrl(details.thumbnail, { unsafeMime: true });
-          await chat.sendMessage(thumb, { caption: previewCaption });
-        } else {
-          await msg.reply(previewCaption);
-        }
+        await this.sendPreviewWithThumbnail(chat, msg, details, previewCaption);
 
         const job = { canceled: false, cancel: null };
         this.activeDownloads.set(key, job);
