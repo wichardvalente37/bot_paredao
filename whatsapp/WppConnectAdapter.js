@@ -29,6 +29,10 @@ class WppConnectAdapter extends EventEmitter {
     }
   }
 
+  async getChatById(chatId) {
+    return this.toChat({ chatId, from: chatId, isGroupMsg: String(chatId).endsWith('@g.us') });
+  }
+
   async getContactById(id) {
     const contact = await this.rawClient.getContact(id).catch(() => null);
     if (!contact) return null;
@@ -52,7 +56,9 @@ class WppConnectAdapter extends EventEmitter {
       selectedButtonId: data.selectedButtonId,
       mentionedIds: (data.mentionedJidList || []).map((jid) => jid),
       async getChat() {
-        return adapter.toChat(data);
+        const chat = adapter.toChat(data);
+        chat.participants = await chat.refreshParticipants();
+        return chat;
       },
       async reply(text) {
         const target = data.isGroupMsg ? data.chatId || data.from : data.from;
@@ -67,7 +73,13 @@ class WppConnectAdapter extends EventEmitter {
     return {
       id: { _serialized: chatId },
       isGroup: Boolean(data.isGroupMsg || String(chatId).endsWith('@g.us')),
-      sendMessage: async (text) => adapter.rawClient.sendText(chatId, text),
+      sendMessage: async (text, options = {}) => {
+        const mentions = Array.isArray(options?.mentions) ? options.mentions : [];
+        if (mentions.length > 0 && typeof adapter.rawClient.sendMentioned === 'function') {
+          return adapter.rawClient.sendMentioned(chatId, text, mentions);
+        }
+        return adapter.rawClient.sendText(chatId, text);
+      },
       sendListMessage: async (title, sections, buttonText, description, footer) => (
         adapter.rawClient.sendListMessage(chatId, title, buttonText, sections, description, footer)
       ),
@@ -76,8 +88,15 @@ class WppConnectAdapter extends EventEmitter {
       removeParticipants: async (ids) => adapter.rawClient.removeParticipant(chatId, ids),
       promoteParticipants: async (ids) => adapter.rawClient.promoteParticipant(chatId, ids),
       demoteParticipants: async (ids) => adapter.rawClient.demoteParticipant(chatId, ids),
-      get participants() {
-        return [];
+      participants: [],
+      async refreshParticipants() {
+        if (!String(chatId).endsWith('@g.us')) return [];
+        const members = await adapter.rawClient.getGroupMembers(chatId).catch(() => []);
+        return members.map((m) => ({
+          id: { _serialized: m.id || m.user || m },
+          isAdmin: Boolean(m.isAdmin),
+          isSuperAdmin: Boolean(m.isSuperAdmin),
+        }));
       },
     };
   }
