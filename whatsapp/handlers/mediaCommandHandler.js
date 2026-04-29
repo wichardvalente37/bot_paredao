@@ -13,16 +13,47 @@ class MediaCommandHandler {
     return ['!mp3', '!mp4', '!mp4a', '!link', '!buscar', '!busca', '!cancelar', '!maxdownload', '!musichelp'].includes(command);
   }
 
+
+  extractYoutubeVideoId(details) {
+    const normalizedId = (details?.id || '').trim();
+    if (/^[a-zA-Z0-9_-]{11}$/.test(normalizedId)) return normalizedId;
+
+    const candidates = [details?.url, details?.thumbnail].filter(Boolean);
+    for (const rawValue of candidates) {
+      try {
+        const parsed = new URL(rawValue);
+        if (parsed.hostname === 'youtu.be') {
+          const fromPath = parsed.pathname.replace(/^\//, '').split('/')[0];
+          if (/^[a-zA-Z0-9_-]{11}$/.test(fromPath)) return fromPath;
+        }
+
+        const fromQuery = parsed.searchParams.get('v');
+        if (/^[a-zA-Z0-9_-]{11}$/.test(fromQuery || '')) return fromQuery;
+
+        const fromEmbedPath = parsed.pathname.match(/\/(?:embed|shorts)\/([a-zA-Z0-9_-]{11})/);
+        if (fromEmbedPath?.[1]) return fromEmbedPath[1];
+
+        const fromImgPath = parsed.pathname.match(/\/vi(?:_webp)?\/([a-zA-Z0-9_-]{11})\//);
+        if (fromImgPath?.[1]) return fromImgPath[1];
+      } catch {
+        // ignora URL inválida
+      }
+    }
+
+    return null;
+  }
+
   buildPreviewThumbnailCandidates(details) {
     const candidates = [];
 
     // Prioriza thumbs JPEG/PNG do domínio oficial do YouTube.
     // Alguns links de thumbnail retornam WEBP/HTML e o WhatsApp envia "imagem vazia".
-    if (details?.id) {
-      candidates.push(`https://i.ytimg.com/vi/${details.id}/maxresdefault.jpg`);
-      candidates.push(`https://i.ytimg.com/vi/${details.id}/sddefault.jpg`);
-      candidates.push(`https://i.ytimg.com/vi/${details.id}/hqdefault.jpg`);
-      candidates.push(`https://i.ytimg.com/vi/${details.id}/mqdefault.jpg`);
+    const videoId = this.extractYoutubeVideoId(details);
+    if (videoId) {
+      candidates.push(`https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`);
+      candidates.push(`https://i.ytimg.com/vi/${videoId}/sddefault.jpg`);
+      candidates.push(`https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`);
+      candidates.push(`https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`);
     }
 
     if (details?.thumbnail && /\.(jpe?g|png)(?:\?|$)/i.test(details.thumbnail)) {
