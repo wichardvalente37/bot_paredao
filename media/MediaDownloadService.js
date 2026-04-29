@@ -126,9 +126,12 @@ class MediaDownloadService {
     ];
 
     if (format === 'mp3') {
-      args.push('--extract-audio', '--audio-format', 'mp3', '--audio-quality', '0');
+      args.push(
+        '--extract-audio', '--audio-format', 'mp3', '--audio-quality', '0',
+        '--write-thumbnail', '--convert-thumbnails', 'jpg', '--embed-thumbnail'
+      );
     } else {
-      args.push('-f', 'bestvideo+bestaudio/best', '--merge-output-format', 'mp4');
+      args.push('-f', 'bestvideo+bestaudio/best', '--merge-output-format', 'mp4', '--write-thumbnail');
     }
 
     args.push(target);
