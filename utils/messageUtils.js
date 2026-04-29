@@ -16,7 +16,14 @@ async function getMentionedIds(msg) {
 }
 
 function normalizeText(msg) {
-  return (msg.body || '').trim();
+  const selectedRowId = msg?.selectedRowId || msg?.listResponse?.singleSelectReply?.selectedRowId;
+  const selectedButtonId = msg?.selectedButtonId || msg?.buttonsResponseMessage?.selectedButtonId;
+  const hydratedButtonId = msg?.templateButtonReplyMessage?.selectedId;
+
+  const interactiveCommand = selectedRowId || selectedButtonId || hydratedButtonId;
+  if (interactiveCommand) return String(interactiveCommand).trim();
+
+  return (msg.body || msg.content || '').trim();
 }
 
 module.exports = {
