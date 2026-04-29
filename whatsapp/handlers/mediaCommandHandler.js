@@ -15,11 +15,20 @@ class MediaCommandHandler {
 
   buildPreviewThumbnailCandidates(details) {
     const candidates = [];
-    if (details?.thumbnail) candidates.push(details.thumbnail);
+
+    // Prioriza thumbs JPEG/PNG do domínio oficial do YouTube.
+    // Alguns links de thumbnail retornam WEBP/HTML e o WhatsApp envia "imagem vazia".
     if (details?.id) {
       candidates.push(`https://i.ytimg.com/vi/${details.id}/maxresdefault.jpg`);
+      candidates.push(`https://i.ytimg.com/vi/${details.id}/sddefault.jpg`);
       candidates.push(`https://i.ytimg.com/vi/${details.id}/hqdefault.jpg`);
+      candidates.push(`https://i.ytimg.com/vi/${details.id}/mqdefault.jpg`);
     }
+
+    if (details?.thumbnail && /\.(jpe?g|png)(?:\?|$)/i.test(details.thumbnail)) {
+      candidates.push(details.thumbnail);
+    }
+
     return [...new Set(candidates.filter(Boolean))];
   }
 
