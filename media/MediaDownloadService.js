@@ -130,6 +130,12 @@ class MediaDownloadService {
         '--extract-audio', '--audio-format', 'mp3', '--audio-quality', '0',
         '--write-thumbnail', '--convert-thumbnails', 'jpg', '--embed-thumbnail'
       );
+    } else if (format === 'mp4a') {
+      args.push(
+        '-f', 'bestaudio[ext=m4a]/bestaudio',
+        '--extract-audio', '--audio-format', 'm4a', '--audio-quality', '0',
+        '--write-thumbnail', '--convert-thumbnails', 'jpg', '--embed-thumbnail'
+      );
     } else {
       args.push('-f', 'bestvideo+bestaudio/best', '--merge-output-format', 'mp4', '--write-thumbnail');
     }
@@ -144,18 +150,39 @@ class MediaDownloadService {
       throw new Error('Arquivo não encontrado após download.');
     }
 
-    const stat = fs.statSync(filePath);
+    const cleanedPath = this.renameToFriendlyName(filePath, title, format);
+    const stat = fs.statSync(cleanedPath);
 
     return {
-      title: title || path.basename(filePath),
+      title: title || path.basename(cleanedPath),
       webpageUrl: webpageUrl || target,
-      filePath,
-      filename: path.basename(filePath),
+      filePath: cleanedPath,
+      filename: path.basename(cleanedPath),
       sizeBytes: stat.size,
       format,
       directDownloadRecommended: !this.isTooLargeForWhatsApp(stat.size),
-      publicUrl: this.buildPublicUrl(path.basename(filePath)),
+      publicUrl: this.buildPublicUrl(path.basename(cleanedPath)),
     };
+  }
+
+  renameToFriendlyName(filePath, title, format) {
+    const extension = path.extname(filePath) || (format === 'mp4' ? '.mp4' : format === 'mp4a' ? '.m4a' : '.mp3');
+    const baseTitle = (title || path.basename(filePath, path.extname(filePath)))
+      .replace(/[\\/:*?"<>|]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 120) || 'midia';
+
+    let candidate = path.join(MEDIA_DIR, `${baseTitle}${extension}`);
+    let counter = 2;
+    while (fs.existsSync(candidate) && candidate !== filePath) {
+      candidate = path.join(MEDIA_DIR, `${baseTitle} (${counter})${extension}`);
+      counter += 1;
+    }
+
+    if (candidate === filePath) return filePath;
+    fs.renameSync(filePath, candidate);
+    return candidate;
   }
 
   findLatestDownloadedFile() {
