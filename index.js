@@ -1,7 +1,7 @@
 require('dotenv').config();
 
-const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
+const { createWhatsappWebJsClient, createWppConnectClient } = require('./whatsapp/clientFactory');
 const QRCode = require('qrcode');
 const Database = require('./database');
 const GameManager = require('./games/paredao/ParedaoGameManager');
@@ -204,64 +204,17 @@ function startHealthServer() {
   });
 }
 
-function resolveChromeExecutablePath() {
-  if (process.env.WWEBJS_EXECUTABLE_PATH) {
-    return process.env.WWEBJS_EXECUTABLE_PATH;
-  }
 
-  if (process.env.CHROME_PATH) {
-    return process.env.CHROME_PATH;
-  }
-
-  return undefined;
-}
-
-function createClient() {
-  const executablePath = resolveChromeExecutablePath();
-  const headless = process.env.WWEBJS_HEADLESS ? process.env.WWEBJS_HEADLESS !== 'false' : true;
-  const authPath = process.env.WWEBJS_AUTH_PATH || '/tmp/.wwebjs_auth';
-  const webVersionRemotePath = process.env.WWEBJS_WEB_VERSION_REMOTE_PATH
-    || 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1023553226-alpha.html';
-  const puppeteerArgs = [
-    '--no-sandbox',
-    '--disable-setuid-sandbox',
-    '--disable-dev-shm-usage',
-    '--no-zygote',
-    '--single-process',
-  ];
-
-  console.log(`🗂️ Sessão do WhatsApp em: ${authPath}`);
-  if (executablePath) {
-    console.log(`🌐 Navegador configurado via WWEBJS_EXECUTABLE_PATH/CHROME_PATH: ${executablePath}`);
-  } else {
-    console.log('🌐 Usando navegador fornecido pelo ambiente (sem download automático do Chrome).');
-  }
-
-  return new Client({
-    authStrategy: new LocalAuth({
-      clientId: 'maestro-bot',
-      dataPath: authPath,
-    }),
-    webVersionCache: {
-      type: 'remote',
-      remotePath: webVersionRemotePath,
-    },
-    puppeteer: {
-      headless,
-      args: puppeteerArgs,
-      ...(executablePath ? { executablePath } : {}),
-    },
-  });
-}
+const clientType = (process.env.WHATSAPP_CLIENT || 'whatsapp-web.js').toLowerCase();
 
 async function bootstrap() {
   const db = Database;
-  const client = createClient();
+  const client = clientType === 'wppconnect' ? await createWppConnectClient() : createWhatsappWebJsClient();
   const manager = new GameManager(client);
   const supremoCommands = new SupremoCommands(client, manager);
-  const app = new BotApplication({ client, db, manager, supremoCommands });
+  const app = new BotApplication({ client, db, manager, supremoCommands, clientType });
 
-  client.on('qr', async (qr) => {
+  if (typeof client.on === 'function') client.on('qr', async (qr) => {
     console.log('====================================');
     console.log('📸 QR Code gerado - escaneie com WhatsApp');
     console.log('====================================');
@@ -280,7 +233,7 @@ async function bootstrap() {
     }
   });
 
-  client.on('authenticated', () => {
+  if (typeof client.on === 'function') client.on('authenticated', () => {
     qrState.authenticated = true;
     qrState.ready = false;
     qrState.clientState = 'authenticated';
@@ -288,7 +241,7 @@ async function bootstrap() {
     qrState.lastUpdated = new Date().toISOString();
     console.log('✅ Sessão autenticada. Aguardando evento "ready"...');
   });
-  client.on('ready', () => {
+  if (typeof client.on === 'function') client.on('ready', () => {
     qrState.authenticated = true;
     qrState.ready = true;
     qrState.clientState = 'ready';
@@ -296,12 +249,12 @@ async function bootstrap() {
     qrState.lastUpdated = new Date().toISOString();
     console.log('🚀 Cliente pronto para uso.');
   });
-  client.on('change_state', (state) => {
+  if (typeof client.on === 'function') client.on('change_state', (state) => {
     qrState.clientState = String(state || 'unknown').toLowerCase();
     qrState.lastUpdated = new Date().toISOString();
     console.log(`🔄 Estado do cliente WhatsApp: ${state}`);
   });
-  client.on('auth_failure', (err) => {
+  if (typeof client.on === 'function') client.on('auth_failure', (err) => {
     qrState.authenticated = false;
     qrState.ready = false;
     qrState.clientState = 'auth_failure';
@@ -310,7 +263,7 @@ async function bootstrap() {
     console.error('❌ Falha na autenticação:', err.message);
     console.error('💡 Dica: apague a sessão anterior (WWEBJS_AUTH_PATH) para forçar um pareamento limpo.');
   });
-  client.on('disconnected', (reason) => {
+  if (typeof client.on === 'function') client.on('disconnected', (reason) => {
     qrState.authenticated = false;
     qrState.ready = false;
     qrState.clientState = `disconnected:${String(reason || 'unknown').toLowerCase()}`;
@@ -347,7 +300,7 @@ async function bootstrap() {
 
   app.setupEvents();
   startHealthServer();
-  client.initialize();
+  await client.initialize();
 }
 
 bootstrap().catch((error) => {
