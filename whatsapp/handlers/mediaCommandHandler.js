@@ -10,7 +10,7 @@ class MediaCommandHandler {
   }
 
   isMediaCommand(command) {
-    return ['!mp3', '!mp4', '!link', '!buscar', '!busca', '!cancelar', '!maxdownload', '!musichelp'].includes(command);
+    return ['!mp3', '!mp4', '!mp4a', '!link', '!buscar', '!busca', '!cancelar', '!maxdownload', '!musichelp'].includes(command);
   }
 
   buildPreviewThumbnailCandidates(details) {
@@ -36,7 +36,16 @@ class MediaCommandHandler {
     const thumbnailUrls = this.buildPreviewThumbnailCandidates(details);
     for (const url of thumbnailUrls) {
       try {
-        const thumb = await MessageMedia.fromUrl(url, { unsafeMime: true });
+        const response = await fetch(url, { redirect: 'follow' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.startsWith('image/')) throw new Error(`Conteúdo inválido: ${contentType || 'desconhecido'}`);
+
+        const bytes = Buffer.from(await response.arrayBuffer());
+        if (!bytes.length) throw new Error('Thumbnail vazia');
+
+        const thumb = new MessageMedia(contentType, bytes.toString('base64'), `thumb-${details?.id || Date.now()}.jpg`);
         await chat.sendMessage(thumb, { caption: previewCaption });
         return true;
       } catch (error) {
@@ -56,8 +65,10 @@ class MediaCommandHandler {
         `🎵 *COMANDOS DE MÍDIA*\n\n` +
         `• *!mp3 Nome da música* → baixa áudio do 1º resultado (ytsearch1)\n` +
         `• *!mp4 Nome da música* → baixa vídeo do 1º resultado (ytsearch1)\n` +
+        `• *!mp4a Nome da música* → baixa áudio em M4A (melhor qualidade)\n` +
         `• *!link URL* → baixa da URL (auto: tenta mp4 e fallback mp3)\n` +
         `• *!link URL mp3* → força áudio MP3\n` +
+        `• *!link URL mp4a* → força áudio M4A\n` +
         `• *!link URL mp4* → força vídeo MP4\n` +
         `• *!buscar*/*!busca texto* → lista os 5 primeiros resultados sem baixar\n` +
         `• *!mp3 Nome* → mostra capa + link e inicia download automático\n` +
@@ -110,14 +121,14 @@ class MediaCommandHandler {
         return true;
       }
 
-      if (command === '!mp3' || command === '!mp4') {
+      if (command === '!mp3' || command === '!mp4' || command === '!mp4a') {
         const query = args.join(' ').trim();
         if (!query) {
           await msg.reply(`❌ Use: *${command} Nome da música*`);
           return true;
         }
 
-        const format = command === '!mp3' ? 'mp3' : 'mp4';
+        const format = command === '!mp3' ? 'mp3' : command === '!mp4a' ? 'mp4a' : 'mp4';
         const details = await this.mediaService.getTopResultDetails(query);
         const requestId = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
         const key = await this.buildPendingKey(msg, requestId);
@@ -163,12 +174,12 @@ class MediaCommandHandler {
 
       if (command === '!link') {
         const [url, forcedFormatRaw] = args;
-        const forcedFormat = ['mp3', 'mp4'].includes((forcedFormatRaw || '').toLowerCase())
+        const forcedFormat = ['mp3', 'mp4', 'mp4a'].includes((forcedFormatRaw || '').toLowerCase())
           ? forcedFormatRaw.toLowerCase()
           : null;
 
         if (!url || !/^https?:\/\//i.test(url)) {
-          await msg.reply('❌ Use: *!link URL* ou *!link URL mp3/mp4*');
+          await msg.reply('❌ Use: *!link URL* ou *!link URL mp3/mp4a/mp4*');
           return true;
         }
 
