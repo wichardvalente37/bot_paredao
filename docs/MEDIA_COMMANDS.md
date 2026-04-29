@@ -5,9 +5,9 @@ Este bot agora suporta download de música/vídeo por comandos no grupo **e no D
 ## Novos comandos
 
 - `!mp3 Nome da música`
-  - Faz prévia do primeiro resultado (`ytsearch1:`), incluindo título/link/thumbnail, e gera um ID para confirmação.
+  - Faz prévia do primeiro resultado (`ytsearch1:`), envia a thumbnail (capa), mostra o link e inicia download automático.
 - `!mp4 Nome da música`
-  - Faz prévia do primeiro resultado (`ytsearch1:`), incluindo título/link/thumbnail, e gera um ID para confirmação.
+  - Faz prévia do primeiro resultado (`ytsearch1:`), envia a thumbnail (capa), mostra o link e inicia download automático.
 - `!link URL`
   - Baixa da URL informada (modo automático: tenta MP4 e fallback para MP3).
 - `!link URL mp3`
@@ -18,10 +18,10 @@ Este bot agora suporta download de música/vídeo por comandos no grupo **e no D
   - Lista 5 resultados de busca (título + URL), sem baixar.
 - `!busca texto`
   - Alias de `!buscar`.
-- `!confirmar ID`
-  - Confirma o download pendente (válido por 10 minutos).
 - `!cancelar ID`
-  - Cancela um download pendente.
+  - Cancela um download em andamento.
+- `!maxdownload N`
+  - Define o limite máximo permitido em MiB para downloads (somente SUPREMO, funciona no grupo e DM). Use `0` para sem limite.
 - `!musichelp`
   - Exibe ajuda rápida dos comandos de mídia.
 

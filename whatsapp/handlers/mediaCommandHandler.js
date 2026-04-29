@@ -5,11 +5,12 @@ const MediaDownloadService = require('../../media/MediaDownloadService');
 class MediaCommandHandler {
   constructor() {
     this.mediaService = new MediaDownloadService();
-    this.pendingDownloads = new Map();
+    this.activeDownloads = new Map();
+    this.maxDownloadMiB = Number.parseInt(process.env.MEDIA_MAX_DOWNLOAD_MIB || '0', 10) || 0;
   }
 
   isMediaCommand(command) {
-    return ['!mp3', '!mp4', '!link', '!buscar', '!busca', '!confirmar', '!cancelar', '!musichelp'].includes(command);
+    return ['!mp3', '!mp4', '!link', '!buscar', '!busca', '!cancelar', '!maxdownload', '!musichelp'].includes(command);
   }
 
   async tryHandle({ msg, command, args, text }) {
@@ -24,9 +25,9 @@ class MediaCommandHandler {
         `• *!link URL mp3* → força áudio MP3\n` +
         `• *!link URL mp4* → força vídeo MP4\n` +
         `• *!buscar*/*!busca texto* → lista os 5 primeiros resultados sem baixar\n` +
-        `• *!mp3 Nome* → prepara download e pede confirmação\n` +
-        `• *!confirmar ID* → confirma download pendente\n` +
-        `• *!cancelar ID* → cancela download pendente`
+        `• *!mp3 Nome* → mostra capa + link e inicia download automático\n` +
+        `• *!cancelar ID* → cancela download em andamento\n` +
+        `• *!maxdownload N* → define limite máximo em MiB (somente SUPREMO)`
       );
       return true;
     }
@@ -55,6 +56,25 @@ class MediaCommandHandler {
         return true;
       }
 
+      if (command === '!maxdownload') {
+        const senderId = msg.author || msg.from;
+        const supremoId = process.env.SUPREMO_ID || '';
+        if (!supremoId || senderId !== supremoId) {
+          await msg.reply('❌ Apenas o SUPREMO pode alterar o limite máximo de download.');
+          return true;
+        }
+
+        const value = Number.parseInt((args[0] || '').trim(), 10);
+        if (!Number.isFinite(value) || value < 0) {
+          await msg.reply('❌ Use: *!maxdownload N* (N em MiB, 0 = sem limite).');
+          return true;
+        }
+
+        this.maxDownloadMiB = value;
+        await msg.reply(`✅ Limite máximo definido para *${value} MiB*.`);
+        return true;
+      }
+
       if (command === '!mp3' || command === '!mp4') {
         const query = args.join(' ').trim();
         if (!query) {
@@ -66,27 +86,31 @@ class MediaCommandHandler {
         const details = await this.mediaService.getTopResultDetails(query);
         const requestId = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
         const key = await this.buildPendingKey(msg, requestId);
-        this.pendingDownloads.set(key, {
-          query,
-          format,
-          createdAt: Date.now(),
-        });
-
-        await msg.reply(
+        const chat = await msg.getChat();
+        const previewCaption =
           `🎯 *Prévia do download*\n` +
           `🆔 ID: *${requestId}*\n` +
           `🎬 ${details.title}\n` +
           `${details.uploader ? `📺 ${details.uploader}\n` : ''}` +
           `${details.durationSec ? `⏱️ ${this.formatDuration(details.durationSec)}\n` : ''}` +
           `${details.url ? `🔗 ${details.url}\n` : ''}` +
-          `${details.thumbnail ? `🖼️ Thumbnail: ${details.thumbnail}\n` : ''}\n` +
-          `✅ Para baixar: *!confirmar ${requestId}*\n` +
-          `❌ Para cancelar: *!cancelar ${requestId}*`
-        );
+          `\n⏬ Download iniciado automaticamente.\n` +
+          `❌ Para cancelar: *!cancelar ${requestId}*`;
+
+        if (details.thumbnail) {
+          const thumb = await MessageMedia.fromUrl(details.thumbnail, { unsafeMime: true });
+          await chat.sendMessage(thumb, { caption: previewCaption });
+        } else {
+          await msg.reply(previewCaption);
+        }
+
+        const job = { canceled: false, cancel: null };
+        this.activeDownloads.set(key, job);
+        this.processDownloadJob({ msg, key, requestId, query, format, job });
         return true;
       }
 
-      if (command === '!confirmar' || command === '!cancelar') {
+      if (command === '!cancelar') {
         const requestId = (args[0] || '').trim();
         if (!requestId) {
           await msg.reply(`❌ Use: *${command} ID*`);
@@ -94,28 +118,16 @@ class MediaCommandHandler {
         }
 
         const key = await this.buildPendingKey(msg, requestId);
-        const pending = this.pendingDownloads.get(key);
-        if (!pending) {
-          await msg.reply('❌ ID não encontrado ou expirado.');
+        const active = this.activeDownloads.get(key);
+        if (!active) {
+          await msg.reply('❌ ID não encontrado ou já finalizado.');
           return true;
         }
 
-        if (Date.now() - pending.createdAt > 10 * 60 * 1000) {
-          this.pendingDownloads.delete(key);
-          await msg.reply('⌛ Esse pedido expirou (10 min). Faça um novo comando.');
-          return true;
-        }
-
-        if (command === '!cancelar') {
-          this.pendingDownloads.delete(key);
-          await msg.reply(`✅ Download *${requestId}* cancelado.`);
-          return true;
-        }
-
-        this.pendingDownloads.delete(key);
-        await msg.reply(`⏳ Processando *${pending.format.toUpperCase()}* para: ${pending.query}`);
-        const download = await this.mediaService.downloadFromQuery(pending.query, pending.format);
-        await this.sendDownloadedMedia(msg, download);
+        active.canceled = true;
+        if (typeof active.cancel === 'function') active.cancel();
+        this.activeDownloads.delete(key);
+        await msg.reply(`✅ Download *${requestId}* cancelado.`);
         return true;
       }
 
@@ -148,6 +160,25 @@ class MediaCommandHandler {
     return `${chat.id._serialized}:${requestId}`;
   }
 
+  async processDownloadJob({ msg, key, requestId, query, format, job }) {
+    try {
+      const download = await this.mediaService.downloadFromQuery(query, format, {
+        onSpawn: (child) => {
+          job.cancel = () => child.kill('SIGKILL');
+          if (job.canceled) job.cancel();
+        },
+      });
+
+      if (job.canceled) return;
+      this.activeDownloads.delete(key);
+      await this.sendDownloadedMedia(msg, download);
+    } catch (error) {
+      this.activeDownloads.delete(key);
+      if (job.canceled) return;
+      await msg.reply(`❌ Erro no download *${requestId}*: ${error.message}`);
+    }
+  }
+
   formatDuration(seconds) {
     const total = Math.max(0, Math.floor(seconds));
     const hh = Math.floor(total / 3600);
@@ -159,6 +190,12 @@ class MediaCommandHandler {
 
   async sendDownloadedMedia(msg, download) {
     const sizeMb = (download.sizeBytes / (1024 * 1024)).toFixed(2);
+    if (this.maxDownloadMiB > 0 && download.sizeBytes > (this.maxDownloadMiB * 1024 * 1024)) {
+      await msg.reply(
+        `⚠️ Download bloqueado: arquivo com ${sizeMb} MB excede o limite atual de ${this.maxDownloadMiB} MiB.`
+      );
+      return;
+    }
 
     if (download.directDownloadRecommended) {
       const media = MessageMedia.fromFilePath(download.filePath);

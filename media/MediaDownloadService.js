@@ -95,24 +95,24 @@ class MediaDownloadService {
     };
   }
 
-  async downloadFromQuery(query, format) {
+  async downloadFromQuery(query, format, options = {}) {
     const target = `ytsearch1:${query}`;
-    return this.downloadTarget(target, format);
+    return this.downloadTarget(target, format, options);
   }
 
-  async downloadFromUrl(url, forcedFormat) {
+  async downloadFromUrl(url, forcedFormat, options = {}) {
     if (forcedFormat) {
-      return this.downloadTarget(url, forcedFormat);
+      return this.downloadTarget(url, forcedFormat, options);
     }
 
     try {
-      return await this.downloadTarget(url, 'mp4');
+      return await this.downloadTarget(url, 'mp4', options);
     } catch (error) {
-      return this.downloadTarget(url, 'mp3');
+      return this.downloadTarget(url, 'mp3', options);
     }
   }
 
-  async downloadTarget(target, format) {
+  async downloadTarget(target, format, options = {}) {
     this.cleanupExpiredFiles();
 
     const outputTemplate = path.join(MEDIA_DIR, `${Date.now()}-${crypto.randomUUID()}-%(title).80s-%(id)s.%(ext)s`);
@@ -133,7 +133,7 @@ class MediaDownloadService {
 
     args.push(target);
 
-    const lines = await this.runYtDlp(args, DOWNLOAD_TIMEOUT_MS);
+    const lines = await this.runYtDlp(args, DOWNLOAD_TIMEOUT_MS, options);
     const [title, webpageUrl, filePathRaw] = lines.slice(-3);
     const filePath = filePathRaw && fs.existsSync(filePathRaw) ? filePathRaw : this.findLatestDownloadedFile();
 
@@ -168,11 +168,14 @@ class MediaDownloadService {
     return files[0]?.fullPath || null;
   }
 
-  runYtDlp(args, timeoutMs) {
+  runYtDlp(args, timeoutMs, options = {}) {
     return new Promise((resolve, reject) => {
       const child = spawn('yt-dlp', args, {
         env: process.env,
       });
+      if (typeof options.onSpawn === 'function') {
+        options.onSpawn(child);
+      }
 
       let stdout = '';
       let stderr = '';
