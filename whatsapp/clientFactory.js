@@ -1,5 +1,6 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const wppconnect = require('@wppconnect-team/wppconnect');
+const WppConnectAdapter = require('./WppConnectAdapter');
 
 function resolveChromeExecutablePath() {
   return process.env.WWEBJS_EXECUTABLE_PATH || process.env.CHROME_PATH || undefined;
@@ -29,11 +30,14 @@ function createWhatsappWebJsClient() {
   });
 }
 
-async function createWppConnectClient() {
+async function createWppConnectClient(qrCallback) {
   const sessionName = process.env.WPPCONNECT_SESSION || 'maestro-bot';
   const tokenStorePath = process.env.WPPCONNECT_TOKEN_STORE || process.env.WWEBJS_AUTH_PATH || '/tmp/.wwebjs_auth';
 
   const client = await wppconnect.create({
+    catchQR: (base64Qrimg, asciiQR, attempts, urlCode) => {
+      if (typeof qrCallback === 'function') qrCallback(urlCode || asciiQR || base64Qrimg);
+    },
     session: sessionName,
     tokenStore: 'file',
     folderNameToken: tokenStorePath,
@@ -43,7 +47,7 @@ async function createWppConnectClient() {
     updatesLog: false,
   });
 
-  return client;
+  return new WppConnectAdapter(client);
 }
 
 module.exports = {

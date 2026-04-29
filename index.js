@@ -300,15 +300,7 @@ async function bootstrap() {
 
   app.setupEvents();
   startHealthServer();
-  if (typeof client.initialize === 'function') {
-    client.initialize();
-  } else {
-    qrState.authenticated = true;
-    qrState.ready = true;
-    qrState.clientState = 'ready';
-    qrState.lastUpdated = new Date().toISOString();
-    console.log('🚀 Cliente wppconnect pronto para uso.');
-  }
+  await client.initialize();
 }
 
 bootstrap().catch((error) => {
