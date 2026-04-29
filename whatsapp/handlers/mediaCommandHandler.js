@@ -64,6 +64,20 @@ class MediaCommandHandler {
   }
 
   async sendPreviewWithThumbnail(chat, msg, details, previewCaption) {
+    const thumbTarget = details?.url || (details?.id ? `https://www.youtube.com/watch?v=${details.id}` : null);
+    if (thumbTarget) {
+      try {
+        const thumbPath = await this.mediaService.downloadPreviewThumbnail(thumbTarget);
+        if (thumbPath) {
+          const thumb = MessageMedia.fromFilePath(thumbPath);
+          await chat.sendMessage(thumb, { caption: previewCaption });
+          return true;
+        }
+      } catch (error) {
+        console.warn('⚠️ Falha ao gerar thumbnail de prévia com yt-dlp:', error.message);
+      }
+    }
+
     const thumbnailUrls = this.buildPreviewThumbnailCandidates(details);
     for (const url of thumbnailUrls) {
       try {
