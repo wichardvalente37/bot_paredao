@@ -95,6 +95,32 @@ class MediaDownloadService {
     };
   }
 
+
+  async downloadPreviewThumbnail(target) {
+    if (!target) return null;
+
+    this.cleanupExpiredFiles();
+    const token = `${Date.now()}-${crypto.randomUUID()}`;
+    const outputTemplate = path.join(MEDIA_DIR, `${token}-thumb.%(ext)s`);
+
+    await this.runYtDlp([
+      '--skip-download',
+      '--no-playlist',
+      '--no-warnings',
+      '--write-thumbnail',
+      '--convert-thumbnails', 'jpg',
+      '-o', outputTemplate,
+      target,
+    ], 90_000);
+
+    const files = fs.readdirSync(MEDIA_DIR)
+      .filter((name) => name.startsWith(`${token}-thumb.`))
+      .map((name) => path.join(MEDIA_DIR, name))
+      .filter((fullPath) => fs.existsSync(fullPath));
+
+    return files[0] || null;
+  }
+
   async downloadFromQuery(query, format, options = {}) {
     const target = `ytsearch1:${query}`;
     return this.downloadTarget(target, format, options);
