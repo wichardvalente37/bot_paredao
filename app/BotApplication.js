@@ -6,10 +6,9 @@ const SupremoHandler = require('../whatsapp/handlers/supremoHandler');
 const { normalizeText } = require('../utils/messageUtils');
 const MediaCommandHandler = require('../whatsapp/handlers/mediaCommandHandler');
 const MenuService = require('../whatsapp/interactive/MenuService');
-const WppInteractiveService = require('../whatsapp/interactive/WppInteractiveService');
 
 class BotApplication {
-  constructor({ client, db, manager, supremoCommands, clientType = 'whatsapp-web.js' }) {
+  constructor({ client, db, manager, supremoCommands }) {
     this.client = client;
     this.db = db;
     this.manager = manager;
@@ -20,8 +19,7 @@ class BotApplication {
     this.dmHandler = new DMHandler({ db, manager, namoroManager: this.namoroManager });
     this.mediaCommandHandler = new MediaCommandHandler();
     this.groupGameHandler = new GroupGameHandler({ client, db, manager, impostorManager: this.impostorManager, namoroManager: this.namoroManager });
-    this.menuService = new MenuService(clientType);
-    this.wppInteractiveService = new WppInteractiveService({ groupGameHandler: this.groupGameHandler, supremoHandler: this.supremoHandler });
+    this.menuService = new MenuService();
     this.isReady = false;
     this.reconnectAttempts = 0;
     this.maxReconnectDelayMs = 30000;
@@ -123,10 +121,6 @@ class BotApplication {
 
       if (text === '!menu' || text === '!painel' || text === '!start') {
         await this.withProcessingTyping(chat, async () => {
-          if (this.menuService.clientType === 'wppconnect') {
-            await this.wppInteractiveService.sendMainPanel(chat, senderId, msg);
-            return;
-          }
           await this.menuService.sendMainMenu({ chat, msg });
         });
         return;

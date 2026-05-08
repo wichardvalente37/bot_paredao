@@ -1,7 +1,7 @@
 require('dotenv').config();
 
 const qrcode = require('qrcode-terminal');
-const { createWhatsappWebJsClient, createWppConnectClient } = require('./whatsapp/clientFactory');
+const { createWhatsappWebJsClient } = require('./whatsapp/clientFactory');
 const QRCode = require('qrcode');
 const Database = require('./database');
 const GameManager = require('./games/paredao/ParedaoGameManager');
@@ -205,14 +205,12 @@ function startHealthServer() {
 }
 
 
-const clientType = (process.env.WHATSAPP_CLIENT || 'whatsapp-web.js').toLowerCase();
-
 async function bootstrap() {
   const db = Database;
-  const client = clientType === 'wppconnect' ? await createWppConnectClient() : createWhatsappWebJsClient();
+  const client = createWhatsappWebJsClient();
   const manager = new GameManager(client);
   const supremoCommands = new SupremoCommands(client, manager);
-  const app = new BotApplication({ client, db, manager, supremoCommands, clientType });
+  const app = new BotApplication({ client, db, manager, supremoCommands });
 
   if (typeof client.on === 'function') client.on('qr', async (qr) => {
     console.log('====================================');

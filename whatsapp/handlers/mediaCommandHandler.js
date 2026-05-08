@@ -7,10 +7,59 @@ class MediaCommandHandler {
     this.mediaService = new MediaDownloadService();
     this.activeDownloads = new Map();
     this.maxDownloadMiB = Number.parseInt(process.env.MEDIA_MAX_DOWNLOAD_MIB || '0', 10) || 0;
+    this.enabled = process.env.MEDIA_DOWNLOADS_ENABLED
+      ? process.env.MEDIA_DOWNLOADS_ENABLED !== 'false'
+      : true;
   }
 
   isMediaCommand(command) {
-    return ['!mp3', '!mp4', '!mp4a', '!link', '!buscar', '!busca', '!cancelar', '!maxdownload', '!musichelp'].includes(command);
+    return ['!mp3', '!mp4', '!mp4a', '!link', '!buscar', '!busca', '!cancelar', '!maxdownload', '!musichelp', '!musica', '!music', '!media'].includes(command);
+  }
+
+  isSupremo(senderId) {
+    const supremoId = process.env.SUPREMO_ID || '';
+    return Boolean(supremoId && senderId === supremoId);
+  }
+
+  cancelAllDownloads() {
+    for (const job of this.activeDownloads.values()) {
+      job.canceled = true;
+      if (typeof job.cancel === 'function') job.cancel();
+    }
+
+    const total = this.activeDownloads.size;
+    this.activeDownloads.clear();
+    return total;
+  }
+
+  async handleFeatureToggle({ msg, args }) {
+    const senderId = msg.author || msg.from;
+    const action = (args[0] || 'status').toLowerCase();
+
+    if (!['on', 'off', 'status', 'ligar', 'desligar', 'ativar', 'desativar'].includes(action)) {
+      await msg.reply('Use: *!musica on*, *!musica off* ou *!musica status*.');
+      return true;
+    }
+
+    if (action === 'status') {
+      await msg.reply(`Downloads de musica: *${this.enabled ? 'ativos' : 'desativados'}*.`);
+      return true;
+    }
+
+    if (!this.isSupremo(senderId)) {
+      await msg.reply('Apenas o SUPREMO pode ativar ou desativar downloads de musica.');
+      return true;
+    }
+
+    const shouldEnable = ['on', 'ligar', 'ativar'].includes(action);
+    this.enabled = shouldEnable;
+    const canceled = shouldEnable ? 0 : this.cancelAllDownloads();
+    await msg.reply(
+      shouldEnable
+        ? 'Downloads de musica ativados.'
+        : `Downloads de musica desativados.${canceled ? ` ${canceled} download(s) em andamento foram cancelados.` : ''}`
+    );
+    return true;
   }
 
 
@@ -105,6 +154,10 @@ class MediaCommandHandler {
   async tryHandle({ msg, command, args, text }) {
     if (!this.isMediaCommand(command)) return false;
 
+    if (command === '!musica' || command === '!music' || command === '!media') {
+      return this.handleFeatureToggle({ msg, args });
+    }
+
     if (command === '!musichelp') {
       await msg.reply(
         `🎵 *COMANDOS DE MÍDIA*\n\n` +
@@ -118,12 +171,18 @@ class MediaCommandHandler {
         `• *!buscar*/*!busca texto* → lista os 5 primeiros resultados sem baixar\n` +
         `• *!mp3 Nome* → mostra capa + link e inicia download automático\n` +
         `• *!cancelar ID* → cancela download em andamento\n` +
-        `• *!maxdownload N* → define limite máximo em MiB (somente SUPREMO)`
+        `• *!maxdownload N* → define limite máximo em MiB (somente SUPREMO)\n` +
+        `• *!musica on/off/status* → ativa, desativa ou consulta downloads (SUPREMO para alterar)`
       );
       return true;
     }
 
     try {
+      if (!this.enabled && command !== '!cancelar') {
+        await msg.reply('Downloads de musica estao desativados. O SUPREMO pode usar *!musica on* para ativar.');
+        return true;
+      }
+
       if (command === '!buscar' || command === '!busca') {
         const query = args.join(' ').trim();
         if (!query) {
@@ -149,8 +208,7 @@ class MediaCommandHandler {
 
       if (command === '!maxdownload') {
         const senderId = msg.author || msg.from;
-        const supremoId = process.env.SUPREMO_ID || '';
-        if (!supremoId || senderId !== supremoId) {
+        if (!this.isSupremo(senderId)) {
           await msg.reply('❌ Apenas o SUPREMO pode alterar o limite máximo de download.');
           return true;
         }
