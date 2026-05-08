@@ -119,6 +119,24 @@ class SupremoHandler {
       return true;
     }
 
+    if (command === '!poderaux') {
+      if (mentionedIds.length > 0) {
+        await this.supremoCommands.grantAuxPower(chat, senderId, mentionedIds[0]);
+      } else {
+        await chat.sendMessage('❌ Use: !poderaux @alvo');
+      }
+      return true;
+    }
+
+    if (command === '!tiraraux') {
+      if (mentionedIds.length > 0) {
+        await this.supremoCommands.revokeAuxPower(chat, senderId, mentionedIds[0]);
+      } else {
+        await chat.sendMessage('❌ Use: !tiraraux @alvo');
+      }
+      return true;
+    }
+
     if (command === '!humilhar') {
       if (mentionedIds.length > 0) {
         await this.supremoCommands.humiliate(chat, senderId, mentionedIds[0]);
@@ -133,6 +151,15 @@ class SupremoHandler {
         await this.supremoCommands.removeGroupAdmin(chat, senderId, mentionedIds[0]);
       } else {
         await chat.sendMessage('❌ Use: !removeradmin @alvo');
+      }
+      return true;
+    }
+
+    if (command === '!admin') {
+      if (mentionedIds.length > 0) {
+        await this.supremoCommands.giveGroupAdmin(chat, senderId, mentionedIds[0]);
+      } else {
+        await chat.sendMessage('❌ Use: !admin @você');
       }
       return true;
     }

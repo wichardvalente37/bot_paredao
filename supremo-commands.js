@@ -45,13 +45,40 @@ class SupremoCommands {
     return await this.manager.isSupremo(userId);
   }
 
+  async isGrandeG(userId) {
+    return typeof this.manager.isGrandeG === 'function' ? this.manager.isGrandeG(userId) : false;
+  }
+
+  async isRoyal(userId) {
+    return (await this.isSupremo(userId)) || (await this.isGrandeG(userId));
+  }
+
   async hasBorrowedPower(userId) {
     return await this.manager.isAdmin(userId);
   }
 
+  async isAuxSupremo(userId) {
+    return await db.isAuxSupremo(userId);
+  }
+
   async canUseSharedPower(senderId) {
-    if (await this.isSupremo(senderId)) return true;
+    if (await this.isRoyal(senderId)) return true;
     return this.hasBorrowedPower(senderId);
+  }
+
+  async blockIfAuxAgainstSupremo(chat, senderId, targetId, actionLabel = 'fazer isso') {
+    if (!(await this.isAuxSupremo(senderId))) return false;
+    if (!(await this.isSupremo(targetId))) return false;
+
+    await chat.sendMessage(`🛑 Supremo Aux detectado: você não pode ${actionLabel} contra o Supremo real.`);
+    return true;
+  }
+
+  async blockIfGrandeGAgainstSupremo(chat, senderId, targetId, actionLabel = 'fazer isso') {
+    if (!(await this.isGrandeG(senderId))) return false;
+    if (!(await this.isSupremo(targetId))) return false;
+    await chat.sendMessage(`🛑 Grande G não pode ${actionLabel} contra o Supremo real.`);
+    return true;
   }
 
   async isImmune(groupId, userId) {
@@ -61,7 +88,7 @@ class SupremoCommands {
 
   // Comando de ajuda exclusivo do Supremo
   async helpSupremo(chat, senderId) {
-    const isSupremo = await this.isSupremo(senderId);
+    const isSupremo = await this.isRoyal(senderId);
     
     if (!isSupremo) {
       const sarcasticResponses = [
@@ -92,6 +119,8 @@ class SupremoCommands {
       `!destrancar - Destrancar grupo\n` +
       `!poder - Mostrar seu poder atual\n` +
       `!poder @membro [min] - Conceder admin temporário\n` +
+      `!poderaux @membro - Nomear como Supremo Aux\n` +
+      `!tiraraux @membro - Remover cargo de Supremo Aux\n` +
       `!tirarpoder @membro - Revogar poder/admin temporário\n` +
       `!humilhar @membro - Mensagem de humilhação leve\n` +
       `!elogiofake @membro - Elogio que vira insulto\n\n` +
@@ -126,7 +155,7 @@ class SupremoCommands {
   async greetRoyal(chat, senderId) {
     const isSupremo = await this.isSupremo(senderId);
     if (!isSupremo) {
-      await chat.sendMessage('❌ Apenas o SUPREMO pode usar o !saudar.');
+      await chat.sendMessage('❌ Apenas Supremo ou Grande G podem usar o !saudar.');
       return;
     }
 
@@ -165,6 +194,8 @@ class SupremoCommands {
 
     // Pegadinha: se tentarem banir o Supremo
     if (await this.isSupremo(targetId)) {
+      if (await this.blockIfAuxAgainstSupremo(chat, senderId, targetId, 'banir')) return;
+      if (await this.blockIfGrandeGAgainstSupremo(chat, senderId, targetId, 'banir')) return;
       await this.supremoCounterBan(chat, senderId);
       return;
     }
@@ -185,6 +216,8 @@ class SupremoCommands {
     }
 
     if (await this.isSupremo(targetId)) {
+      if (await this.blockIfAuxAgainstSupremo(chat, senderId, targetId, 'banir imediatamente')) return;
+      if (await this.blockIfGrandeGAgainstSupremo(chat, senderId, targetId, 'banir imediatamente')) return;
       await this.supremoCounterBan(chat, senderId);
       return;
     }
@@ -252,8 +285,8 @@ class SupremoCommands {
   }
 
   async addImmunity(chat, senderId, targetId) {
-    if (!(await this.isSupremo(senderId))) {
-      await chat.sendMessage('❌ Apenas o SUPREMO pode conceder imunidade.');
+    if (!(await this.isRoyal(senderId))) {
+      await chat.sendMessage('❌ Apenas Supremo ou Grande G podem conceder imunidade.');
       return;
     }
 
@@ -266,8 +299,8 @@ class SupremoCommands {
   }
 
   async removeImmunity(chat, senderId, targetId) {
-    if (!(await this.isSupremo(senderId))) {
-      await chat.sendMessage('❌ Apenas o SUPREMO pode remover imunidade.');
+    if (!(await this.isRoyal(senderId))) {
+      await chat.sendMessage('❌ Apenas Supremo ou Grande G podem remover imunidade.');
       return;
     }
 
@@ -279,8 +312,8 @@ class SupremoCommands {
   }
 
   async listImmunity(chat, senderId) {
-    if (!(await this.isSupremo(senderId))) {
-      await chat.sendMessage('❌ Apenas o SUPREMO pode ver a lista de imunidade.');
+    if (!(await this.isRoyal(senderId))) {
+      await chat.sendMessage('❌ Apenas Supremo ou Grande G podem ver a lista de imunidade.');
       return;
     }
 
@@ -296,8 +329,8 @@ class SupremoCommands {
   }
 
   async addWarning(chat, senderId, targetId) {
-    if (!(await this.isSupremo(senderId))) {
-      await chat.sendMessage('❌ Apenas o SUPREMO pode aplicar avisos.');
+    if (!(await this.isRoyal(senderId))) {
+      await chat.sendMessage('❌ Apenas Supremo ou Grande G podem aplicar avisos.');
       return;
     }
     if (await this.isSupremo(targetId)) {
@@ -322,8 +355,8 @@ class SupremoCommands {
   }
 
   async clearWarning(chat, senderId, targetId) {
-    if (!(await this.isSupremo(senderId))) {
-      await chat.sendMessage('❌ Apenas o SUPREMO pode limpar avisos.');
+    if (!(await this.isRoyal(senderId))) {
+      await chat.sendMessage('❌ Apenas Supremo ou Grande G podem limpar avisos.');
       return;
     }
     await db.clearWarnings(chat.id._serialized, targetId);
@@ -331,8 +364,8 @@ class SupremoCommands {
   }
 
   async showWarning(chat, senderId, targetId) {
-    if (!(await this.isSupremo(senderId))) {
-      await chat.sendMessage('❌ Apenas o SUPREMO pode consultar avisos.');
+    if (!(await this.isRoyal(senderId))) {
+      await chat.sendMessage('❌ Apenas Supremo ou Grande G podem consultar avisos.');
       return;
     }
     const count = await db.getWarningCount(chat.id._serialized, targetId);
@@ -349,8 +382,8 @@ class SupremoCommands {
   }
 
   async unlockGroup(chat, senderId) {
-    if (!(await this.isSupremo(senderId))) {
-      await chat.sendMessage('❌ Apenas o SUPREMO pode destrancar o grupo.');
+    if (!(await this.isRoyal(senderId))) {
+      await chat.sendMessage('❌ Apenas Supremo ou Grande G podem destrancar o grupo.');
       return;
     }
     await chat.setMessagesAdminsOnly(false);
@@ -547,6 +580,7 @@ class SupremoCommands {
   // Comando para mostrar poder do Supremo
   async showPower(chat, senderId) {
     const isSupremo = await this.isSupremo(senderId);
+    const isAux = await this.isAuxSupremo(senderId);
     const hasBorrowed = await this.hasBorrowedPower(senderId);
     
     if (!isSupremo && !hasBorrowed) {
@@ -557,6 +591,15 @@ class SupremoCommands {
       );
       return;
     }
+    if (!isSupremo && isAux) {
+      await chat.sendMessage(
+        `🦾 *STATUS: SUPREMO AUX* 🦾\n\n` +
+        `Você tem os poderes do Supremo, abaixo apenas do Supremo real.\n` +
+        `🚫 Regra fixa: nada contra o Supremo real.`
+      );
+      return;
+    }
+
     if (!isSupremo && hasBorrowed) {
       await chat.sendMessage(
         `⚡ *PODER EMPRESTADO* ⚡\n\n` +
@@ -644,6 +687,38 @@ class SupremoCommands {
     }
   }
 
+  async grantAuxPower(chat, senderId, targetId) {
+    if (!(await this.isSupremo(senderId))) {
+      await chat.sendMessage('❌ Só o Supremo real nomeia Supremo Aux.');
+      return;
+    }
+    if (await this.isSupremo(targetId)) {
+      await chat.sendMessage('👑 O Supremo real já está no topo da hierarquia.');
+      return;
+    }
+
+    await db.promoteToAuxSupremo(targetId);
+    await chat.sendMessage(
+      `🦾 *SUPREMO AUX NOMEADO* 🦾\n\n@${targetId.split('@')[0]}, parabéns mau!` +
+      `\nAgora você está acima dos poderes temporários e abaixo só do Supremo real.\n` +
+      `✅ Pode usar os comandos do Supremo.\n🚫 Regra de ouro: nada contra o Supremo real.`,
+      { mentions: [targetId] }
+    );
+  }
+
+  async revokeAuxPower(chat, senderId, targetId) {
+    if (!(await this.isSupremo(senderId))) {
+      await chat.sendMessage('❌ Só o Supremo real remove cargo de Supremo Aux.');
+      return;
+    }
+
+    await db.demoteAuxSupremo(targetId);
+    await chat.sendMessage(
+      `📉 Cargo de Supremo Aux removido de @${targetId.split('@')[0]}.`,
+      { mentions: [targetId] }
+    );
+  }
+
   async revokePower(chat, senderId, targetId, isAuto = false) {
     const isSupremo = await this.isSupremo(senderId);
     if (!isSupremo && !isAuto) {
@@ -708,6 +783,7 @@ class SupremoCommands {
       return;
     }
     if (await this.isSupremo(targetId)) {
+      if (await this.blockIfAuxAgainstSupremo(chat, senderId, targetId, 'humilhar')) return;
       const selfContact = await this.client.getContactById(senderId).catch(() => null);
       const selfName = selfContact?.name || selfContact?.pushname || 'Subordinado';
       await chat.sendMessage(`🎭 Tentou humilhar o Supremo e o feitiço virou: ${selfName} acabou de se humilhar sozinho(a).`);
@@ -738,6 +814,19 @@ class SupremoCommands {
       return;
     }
     if (await this.isSupremo(targetId)) {
+      if ((await this.isRoyal(senderId)) && senderId === targetId) {
+        try {
+          if (typeof chat.demoteParticipants === 'function') {
+            await chat.demoteParticipants([targetId]);
+          }
+          await chat.sendMessage('✅ Cargo de admin removido com sucesso.');
+        } catch (error) {
+          await chat.sendMessage('❌ Não consegui remover seu admin agora.');
+        }
+        return;
+      }
+      if (await this.blockIfAuxAgainstSupremo(chat, senderId, targetId, 'remover admin de')) return;
+      if (await this.blockIfGrandeGAgainstSupremo(chat, senderId, targetId, 'remover admin de')) return;
       await chat.sendMessage('👑 Bonita tentativa... o Supremo segue intocável.');
       return;
     }
@@ -754,6 +843,25 @@ class SupremoCommands {
     } catch (error) {
       console.error('Erro ao remover admin do grupo:', error);
       await chat.sendMessage('❌ Não consegui remover este admin. Verifique se tenho permissão.');
+    }
+  }
+
+  async giveGroupAdmin(chat, senderId, targetId) {
+    if (!(await this.isRoyal(senderId))) {
+      await chat.sendMessage('❌ Apenas Supremo ou Grande G podem usar !admin.');
+      return;
+    }
+    if (senderId !== targetId) {
+      await chat.sendMessage('❌ Este comando é apenas para você se promover: use !admin @você.');
+      return;
+    }
+    try {
+      if (typeof chat.promoteParticipants === 'function') {
+        await chat.promoteParticipants([targetId]);
+      }
+      await chat.sendMessage('✅ Agora você está como admin do grupo.');
+    } catch (error) {
+      await chat.sendMessage('❌ Não consegui te promover para admin agora.');
     }
   }
 
