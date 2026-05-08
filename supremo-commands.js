@@ -66,6 +66,10 @@ class SupremoCommands {
     return this.hasBorrowedPower(senderId);
   }
 
+  async getRoyalTitle(senderId) {
+    return (await this.isGrandeG(senderId)) ? 'GRANDE G' : 'SUPREMO';
+  }
+
   async blockIfAuxAgainstSupremo(chat, senderId, targetId, actionLabel = 'fazer isso') {
     if (!(await this.isAuxSupremo(senderId))) return false;
     if (!(await this.isSupremo(targetId))) return false;
@@ -86,7 +90,6 @@ class SupremoCommands {
     return immuneList.includes(userId);
   }
 
-  // Comando de ajuda exclusivo do Supremo
   async helpSupremo(chat, senderId) {
     const isSupremo = await this.isRoyal(senderId);
     
@@ -104,9 +107,14 @@ class SupremoCommands {
     }
 
     // Menu de ajuda do Supremo
-    const helpText = `👑 *COMANDOS EXCLUSIVOS DO SUPREMO* 👑\n\n` +
+    const isGrandeG = await this.isGrandeG(senderId);
+    const titulo = isGrandeG ? 'GRANDE G' : 'SUPREMO';
+    const comandoAjuda = isGrandeG ? '!helpgrandeg' : '!helpsupremo';
+
+    const helpText = `👑 *COMANDOS EXCLUSIVOS DO ${titulo}* 👑\n\n` +
       `🎯 *PODERES ABSOLUTOS:*\n` +
       `!ban @membro - Banir com contagem regressiva épica\n` +
+      `!pararban @membro - Parar contagem de ban em andamento\n` +
       `!banagora @membro - Ban imediato sem contagem\n` +
       `!randomban - Banir aleatoriamente alguém (surpresa!)\n` +
       `!imunidadeadd @membro - Proteger de randomban\n` +
@@ -135,6 +143,7 @@ class SupremoCommands {
       `!listasubordinados - Listar todos no grupo\n` +
       `!status - Status avançado do Supremo\n` +
       `!purge - Limpar muitas mensagens\n\n` +
+      `🆘 *AJUDA:* use ${comandoAjuda} para abrir este menu quando quiser.\n\n` +
       `⚠️ *AVISO:* Com grande poder vem grande possibilidade de trollagem!`;
     
     await chat.sendMessage(helpText);
@@ -205,7 +214,7 @@ class SupremoCommands {
     }
 
     // Ban normal do Supremo
-    await this.executeBan(chat, targetId, false);
+    await this.executeBan(chat, targetId, false, senderId);
   }
 
 
@@ -350,7 +359,7 @@ class SupremoCommands {
       await chat.sendMessage(`🚨 Limite de avisos atingido. Ban automático ativado para @${targetId.split('@')[0]}.`, {
         mentions: [targetId]
       });
-      await this.executeBan(chat, targetId, false);
+      await this.executeBan(chat, targetId, false, senderId);
     }
   }
 
@@ -459,19 +468,22 @@ class SupremoCommands {
   }
 
   // Executar ban com contagem regressiva
-  async executeBan(chat, targetId, isRandom = false) {
+  async executeBan(chat, targetId, isRandom = false, senderId = null) {
     try {
       const targetContact = await this.client.getContactById(targetId);
       const targetName = targetContact?.name || targetContact?.pushname || "Desconhecido";
       
       // Mensagem inicial sarcástica
+      const royalTitle = senderId ? await this.getRoyalTitle(senderId) : 'SUPREMO';
       let introMessage = `👑 *DECRETO REAL Nº ${Math.floor(Math.random() * 1000) + 1}* 👑\n\n`;
+      introMessage += `🪪 *AUTORIDADE:* ${royalTitle}\n`;
+
       
       if (isRandom) {
         introMessage += `🎯 *VÍTIMA SELECIONADA:* ${targetName}\n`;
         introMessage += `📊 *MOTIVO:* Azar puro e simples\n`;
       } else {
-        introMessage += `⚖️ *JULGAMENTO DO SUPREMO*\n`;
+        introMessage += `⚖️ *JULGAMENTO REAL*\n`;
         introMessage += `👤 *RÉU:* ${targetName}\n`;
         introMessage += `📜 *ACUSAÇÃO:* Existir sem permissão explícita\n`;
       }
@@ -495,14 +507,29 @@ class SupremoCommands {
         { time: 1, msg: "1️⃣ *1 segundo* - *TUDO ACABOU, SEU TEMPO SE ESGOTOU!*" }
       ];
 
+      const banKey = `${chat.id._serialized}:${targetId}`;
+      const token = { cancelled: false };
+      this.bansInProgress.set(banKey, token);
+
       for (const item of messages) {
         await new Promise(resolve => setTimeout(resolve, 1000));
+        if (token.cancelled) {
+          await chat.sendMessage(`🛑 Contagem de ban cancelada para @${targetId.split('@')[0]}.`, { mentions: [targetId] });
+          this.bansInProgress.delete(banKey);
+          return;
+        }
         await chat.sendMessage(item.msg);
       }
 
       // Banir de fato
       await new Promise(resolve => setTimeout(resolve, 1000));
+      if (token.cancelled) {
+        await chat.sendMessage(`🛑 Contagem de ban cancelada para @${targetId.split('@')[0]}.`, { mentions: [targetId] });
+        this.bansInProgress.delete(banKey);
+        return;
+      }
       await chat.removeParticipants([targetId]);
+      this.bansInProgress.delete(banKey);
       
       // Mensagem pós-ban
       const banMessages = [
@@ -808,6 +835,20 @@ class SupremoCommands {
     await chat.sendMessage(randomHumiliation);
   }
 
+  async stopBanCountdown(chat, senderId, targetId) {
+    if (!(await this.canUseSharedPower(senderId))) {
+      await chat.sendMessage('❌ Sem poder para parar contagem de ban.');
+      return;
+    }
+    const banKey = `${chat.id._serialized}:${targetId}`;
+    const token = this.bansInProgress.get(banKey);
+    if (!token) {
+      await chat.sendMessage('ℹ️ Não existe contagem de ban ativa para esse alvo.');
+      return;
+    }
+    token.cancelled = true;
+  }
+
   async removeGroupAdmin(chat, senderId, targetId) {
     if (!(await this.canUseSharedPower(senderId))) {
       await chat.sendMessage('❌ Sem poder para remover admin.');
@@ -848,11 +889,11 @@ class SupremoCommands {
 
   async giveGroupAdmin(chat, senderId, targetId) {
     if (!(await this.isRoyal(senderId))) {
-      await chat.sendMessage('❌ Apenas Supremo ou Grande G podem usar !admin.');
+      await chat.sendMessage('❌ Apenas Supremo ou Grande G podem usar !admin ou !removeadmin.');
       return;
     }
     if (senderId !== targetId) {
-      await chat.sendMessage('❌ Este comando é apenas para você se promover: use !admin @você.');
+      await chat.sendMessage('❌ Este comando é apenas para você se promover: use !admin @você ou !removeadmin @você.');
       return;
     }
     try {

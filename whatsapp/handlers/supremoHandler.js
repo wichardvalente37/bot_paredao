@@ -10,7 +10,7 @@ class SupremoHandler {
 
     const mentionedIds = await getMentionedIds(msg);
 
-    if (command === '!helpsupremo') {
+    if (command === '!helpsupremo' || command === '!helpgrandeg') {
       await this.supremoCommands.helpSupremo(chat, senderId);
       return true;
     }
@@ -24,6 +24,15 @@ class SupremoHandler {
       return true;
     }
 
+
+    if (command === '!pararban') {
+      if (mentionedIds.length > 0) {
+        await this.supremoCommands.stopBanCountdown(chat, senderId, mentionedIds[0]);
+      } else {
+        await chat.sendMessage('❌ Use: !pararban @membro');
+      }
+      return true;
+    }
 
     if (command === '!banagora') {
       if (mentionedIds.length > 0) {
@@ -146,7 +155,7 @@ class SupremoHandler {
       return true;
     }
 
-    if (command === '!removeradmin') {
+    if (command === '!removeradmin' || command === '!removeadmin') {
       if (mentionedIds.length > 0) {
         await this.supremoCommands.removeGroupAdmin(chat, senderId, mentionedIds[0]);
       } else {
