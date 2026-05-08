@@ -45,6 +45,20 @@ class SupremoCommands {
     return await this.manager.isSupremo(userId);
   }
 
+  async hasBorrowedPower(userId) {
+    return await this.manager.isAdmin(userId);
+  }
+
+  async canUseSharedPower(senderId) {
+    if (await this.isSupremo(senderId)) return true;
+    return this.hasBorrowedPower(senderId);
+  }
+
+  async isImmune(groupId, userId) {
+    const immuneList = await db.getImmunityList(groupId);
+    return immuneList.includes(userId);
+  }
+
   // Comando de ajuda exclusivo do Supremo
   async helpSupremo(chat, senderId) {
     const isSupremo = await this.isSupremo(senderId);
@@ -144,16 +158,18 @@ class SupremoCommands {
 
   // Comando de ban com contagem regressiva
   async banMember(chat, senderId, targetId) {
-    const isSupremo = await this.isSupremo(senderId);
-    
-    if (!isSupremo) {
-      await chat.sendMessage("❌ Apenas o SUPREMO pode banir pessoas. Continue sonhando... 😴");
+    if (!(await this.canUseSharedPower(senderId))) {
+      await chat.sendMessage("❌ Sem poder para banir. Continue sonhando... 😴");
       return;
     }
 
     // Pegadinha: se tentarem banir o Supremo
     if (await this.isSupremo(targetId)) {
       await this.supremoCounterBan(chat, senderId);
+      return;
+    }
+    if (await this.isImmune(chat.id._serialized, targetId)) {
+      await chat.sendMessage('🛡️ Este alvo está na lista de imunidade. Você não pode banir esta pessoa.');
       return;
     }
 
@@ -163,15 +179,17 @@ class SupremoCommands {
 
 
   async banImmediate(chat, senderId, targetId) {
-    const isSupremo = await this.isSupremo(senderId);
-
-    if (!isSupremo) {
-      await chat.sendMessage('❌ Apenas o SUPREMO pode usar ban imediato.');
+    if (!(await this.canUseSharedPower(senderId))) {
+      await chat.sendMessage('❌ Sem poder para usar ban imediato.');
       return;
     }
 
     if (await this.isSupremo(targetId)) {
-      await chat.sendMessage('👑 Bonita tentativa. O Supremo é imbanível.');
+      await this.supremoCounterBan(chat, senderId);
+      return;
+    }
+    if (await this.isImmune(chat.id._serialized, targetId)) {
+      await chat.sendMessage('🛡️ Este alvo está na lista de imunidade. Você não pode banir esta pessoa.');
       return;
     }
 
@@ -188,9 +206,7 @@ class SupremoCommands {
 
   // Ban aleatório
   async randomBan(chat, senderId) {
-    const isSupremo = await this.isSupremo(senderId);
-    
-    if (!isSupremo) {
+    if (!(await this.canUseSharedPower(senderId))) {
       await chat.sendMessage("❌ *ACESSO NEGADO* ❌\n\nApenas o SUPREMO pode brincar de roleta russa com bans! 😈");
       return;
     }
@@ -324,8 +340,8 @@ class SupremoCommands {
   }
 
   async lockGroup(chat, senderId) {
-    if (!(await this.isSupremo(senderId))) {
-      await chat.sendMessage('❌ Apenas o SUPREMO pode trancar o grupo.');
+    if (!(await this.canUseSharedPower(senderId))) {
+      await chat.sendMessage('❌ Sem poder para trancar o grupo.');
       return;
     }
     await chat.setMessagesAdminsOnly(true);
@@ -531,12 +547,22 @@ class SupremoCommands {
   // Comando para mostrar poder do Supremo
   async showPower(chat, senderId) {
     const isSupremo = await this.isSupremo(senderId);
+    const hasBorrowed = await this.hasBorrowedPower(senderId);
     
-    if (!isSupremo) {
+    if (!isSupremo && !hasBorrowed) {
       await chat.sendMessage(
         `⚡ *NÍVEL DE PODER DETECTADO:* 0.001%\n\n` +
         `Você tem poder equivalente a uma formiga com asma.\n` +
         `Continue tentando, pequeno inseto! 🐜`
+      );
+      return;
+    }
+    if (!isSupremo && hasBorrowed) {
+      await chat.sendMessage(
+        `⚡ *PODER EMPRESTADO* ⚡\n\n` +
+        `Você recebeu autoridade limitada do Supremo.\n` +
+        `✅ Pode: !poder, !ban, !banagora, !randomban, !trancar, !humilhar e !removeradmin\n` +
+        `🚫 Não pode: comandos de imunidade, mudar nome, conceder/remover poderes de outros.`
       );
       return;
     }
@@ -580,10 +606,6 @@ class SupremoCommands {
     try {
       await db.promoteToAdmin(targetId);
 
-      if (typeof chat.promoteParticipants === 'function') {
-        await chat.promoteParticipants([targetId]).catch(() => null);
-      }
-
       const targetName = await this.getDisplayName(targetId);
       const mentionText = `@${targetId.split('@')[0]}`;
 
@@ -599,10 +621,11 @@ class SupremoCommands {
         }, timeoutMs);
         this.powerTimers.set(targetId, timeout);
 
-        await chat.sendMessage(
-          `⚡ *PODER TEMPORÁRIO CONCEDIDO* ⚡\n\n` +
-          `${mentionText}, parabéns! Você foi promovido a admin por *${durationMinutes} minuto(s)*.\n` +
-          `🧠 *Use com sabedoria... ou eu retiro com sarcasmo dobrado.*`,
+      await chat.sendMessage(
+        `⚡ *PODER TEMPORÁRIO CONCEDIDO* ⚡\n\n` +
+          `${mentionText}, parabéns! Você recebeu *poder emprestado* por *${durationMinutes} minuto(s)*.\n` +
+          `✅ Você pode usar: !poder, !ban, !banagora, !randomban, !trancar, !humilhar e !removeradmin.\n` +
+          `🛡️ Limites: não mexe em imunidade, não altera nome do grupo, não concede/remove poder de outros.`,
           { mentions: [targetId] }
         );
         return;
@@ -610,8 +633,9 @@ class SupremoCommands {
 
       await chat.sendMessage(
         `⚡ *PODER DEFINITIVO (POR ENQUANTO)* ⚡\n\n` +
-        `${mentionText}, ${targetName} agora tem poderes administrativos.\n` +
-        `😈 *Não me faça arrepender desta decisão imperial.*`,
+        `${mentionText}, ${targetName} agora tem *poder emprestado*.\n` +
+        `✅ Pode usar: !poder, !ban, !banagora, !randomban, !trancar, !humilhar e !removeradmin.\n` +
+        `🛡️ Limites: sem imunidade, sem trocar nome do grupo, sem promover/despromover poder emprestado.`,
         { mentions: [targetId] }
       );
     } catch (error) {
@@ -634,10 +658,6 @@ class SupremoCommands {
       }
 
       await db.demoteAdmin(targetId);
-
-      if (typeof chat.demoteParticipants === 'function') {
-        await chat.demoteParticipants([targetId]).catch(() => null);
-      }
 
       const mentionText = `@${targetId.split('@')[0]}`;
       const payload = { mentions: [targetId] };
@@ -683,10 +703,18 @@ class SupremoCommands {
 
   // Comando de humilhação leve
   async humiliate(chat, senderId, targetId) {
-    const isSupremo = await this.isSupremo(senderId);
-    
-    if (!isSupremo) {
+    if (!(await this.canUseSharedPower(senderId))) {
       await chat.sendMessage("❌ *PERMISSÃO INSUFICIENTE* ❌\n\nVocê precisa ser SUPREMO para humilhar alguém. Por enquanto, só pode ser humilhado! 😂");
+      return;
+    }
+    if (await this.isSupremo(targetId)) {
+      const selfContact = await this.client.getContactById(senderId).catch(() => null);
+      const selfName = selfContact?.name || selfContact?.pushname || 'Subordinado';
+      await chat.sendMessage(`🎭 Tentou humilhar o Supremo e o feitiço virou: ${selfName} acabou de se humilhar sozinho(a).`);
+      return;
+    }
+    if (await this.isImmune(chat.id._serialized, targetId)) {
+      await chat.sendMessage('🛡️ Este alvo está na lista de imunidade. Você não pode humilhar esta pessoa.');
       return;
     }
 
@@ -702,6 +730,31 @@ class SupremoCommands {
 
     const randomHumiliation = humiliations[Math.floor(Math.random() * humiliations.length)];
     await chat.sendMessage(randomHumiliation);
+  }
+
+  async removeGroupAdmin(chat, senderId, targetId) {
+    if (!(await this.canUseSharedPower(senderId))) {
+      await chat.sendMessage('❌ Sem poder para remover admin.');
+      return;
+    }
+    if (await this.isSupremo(targetId)) {
+      await chat.sendMessage('👑 Bonita tentativa... o Supremo segue intocável.');
+      return;
+    }
+    if (await this.isImmune(chat.id._serialized, targetId)) {
+      await chat.sendMessage('🛡️ Este alvo está na lista de imunidade. Você não pode remover o admin desta pessoa.');
+      return;
+    }
+
+    try {
+      if (typeof chat.demoteParticipants === 'function') {
+        await chat.demoteParticipants([targetId]);
+      }
+      await chat.sendMessage(`📉 @${targetId.split('@')[0]} foi removido(a) da administração.`, { mentions: [targetId] });
+    } catch (error) {
+      console.error('Erro ao remover admin do grupo:', error);
+      await chat.sendMessage('❌ Não consegui remover este admin. Verifique se tenho permissão.');
+    }
   }
 
   // Comando de elogio falso

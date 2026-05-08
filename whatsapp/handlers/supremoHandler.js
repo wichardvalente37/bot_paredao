@@ -110,7 +110,7 @@ class SupremoHandler {
       return true;
     }
 
-    if (command === '!tirarpoder') {
+    if (command === '!tirarpoder' || command === '!despromover') {
       if (mentionedIds.length > 0) {
         await this.supremoCommands.revokePower(chat, senderId, mentionedIds[0]);
       } else {
@@ -124,6 +124,15 @@ class SupremoHandler {
         await this.supremoCommands.humiliate(chat, senderId, mentionedIds[0]);
       } else {
         await chat.sendMessage('❌ Use: !humilhar @alvo');
+      }
+      return true;
+    }
+
+    if (command === '!removeradmin') {
+      if (mentionedIds.length > 0) {
+        await this.supremoCommands.removeGroupAdmin(chat, senderId, mentionedIds[0]);
+      } else {
+        await chat.sendMessage('❌ Use: !removeradmin @alvo');
       }
       return true;
     }
