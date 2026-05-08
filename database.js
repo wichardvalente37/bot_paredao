@@ -33,6 +33,8 @@ class Database {
     
     const SUPREMO_ID = process.env.SUPREMO_ID;
     const SUPREMO_GROUP_ID = process.env.SUPREMO_GROUP_ID; // Novo: ID do grupo do Supremo
+    const GRANDE_G_ID = process.env.GRANDE_G_ID;
+    const GRANDE_G_GROUP_ID = process.env.GRANDE_G_GROUP_ID;
     
     if (SUPREMO_ID && SUPREMO_GROUP_ID) {
       await this.query(`
@@ -42,6 +44,16 @@ class Database {
         SET dm_id = $2, is_admin = true, is_supremo = true
       `, [SUPREMO_GROUP_ID, SUPREMO_ID]);
       console.log(`👑 SUPREMO registrado: ${SUPREMO_GROUP_ID} ↔ ${SUPREMO_ID}`);
+    }
+
+    if (GRANDE_G_ID && GRANDE_G_GROUP_ID) {
+      await this.query(`
+        INSERT INTO players(id, dm_id, name, is_admin, is_grande_g) 
+        VALUES($1, $2, '🦍 Grande G', true, true)
+        ON CONFLICT (id) DO UPDATE 
+        SET dm_id = $2, is_admin = true, is_grande_g = true
+      `, [GRANDE_G_GROUP_ID, GRANDE_G_ID]);
+      console.log(`🦍 Grande G registrado: ${GRANDE_G_GROUP_ID} ↔ ${GRANDE_G_ID}`);
     }
     console.log('✅ Banco conectado!');
   }
@@ -63,6 +75,8 @@ class Database {
         dm_id VARCHAR(80) UNIQUE,
         name VARCHAR(150) NOT NULL,
         is_admin BOOLEAN DEFAULT false,
+        is_aux_supremo BOOLEAN DEFAULT false,
+        is_grande_g BOOLEAN DEFAULT false,
         is_supremo BOOLEAN DEFAULT false,
         gender VARCHAR(10),
         created_at TIMESTAMP DEFAULT NOW()
@@ -149,6 +163,8 @@ class Database {
 
       ALTER TABLE games ADD COLUMN IF NOT EXISTS game_type VARCHAR(20) DEFAULT 'paredao';
       ALTER TABLE players ADD COLUMN IF NOT EXISTS gender VARCHAR(10);
+      ALTER TABLE players ADD COLUMN IF NOT EXISTS is_aux_supremo BOOLEAN DEFAULT false;
+      ALTER TABLE players ADD COLUMN IF NOT EXISTS is_grande_g BOOLEAN DEFAULT false;
       ALTER TABLE group_settings ALTER COLUMN selected_game DROP NOT NULL;
 
       CREATE INDEX IF NOT EXISTS idx_games_group_status ON games(group_id, status);
@@ -579,10 +595,21 @@ class Database {
     if (!player) return false;
     
     const res = await this.query(
-      'SELECT is_admin, is_supremo FROM players WHERE id = $1',
+      'SELECT is_admin, is_aux_supremo, is_grande_g, is_supremo FROM players WHERE id = $1',
       [player.id]
     );
-    return res.rows[0]?.is_admin || res.rows[0]?.is_supremo || false;
+    return res.rows[0]?.is_admin || res.rows[0]?.is_aux_supremo || res.rows[0]?.is_grande_g || res.rows[0]?.is_supremo || false;
+  }
+
+  async isAuxSupremo(playerId) {
+    const player = await this.findPlayerByAnyId(playerId);
+    if (!player) return false;
+
+    const res = await this.query(
+      'SELECT is_aux_supremo FROM players WHERE id = $1',
+      [player.id]
+    );
+    return res.rows[0]?.is_aux_supremo || false;
   }
 
   async promoteToAdmin(playerId) {
@@ -600,6 +627,26 @@ class Database {
     if (player) {
       await this.query(
         'UPDATE players SET is_admin = false WHERE id = $1 AND is_supremo = false',
+        [player.id]
+      );
+    }
+  }
+
+  async promoteToAuxSupremo(playerId) {
+    const player = await this.findPlayerByAnyId(playerId);
+    if (player) {
+      await this.query(
+        'UPDATE players SET is_aux_supremo = true, is_admin = true WHERE id = $1 AND is_supremo = false',
+        [player.id]
+      );
+    }
+  }
+
+  async demoteAuxSupremo(playerId) {
+    const player = await this.findPlayerByAnyId(playerId);
+    if (player) {
+      await this.query(
+        'UPDATE players SET is_aux_supremo = false WHERE id = $1 AND is_supremo = false',
         [player.id]
       );
     }

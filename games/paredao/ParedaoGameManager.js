@@ -10,6 +10,8 @@ class GameManager {
     this.selfEditByGroup = new Map();
     this.SUPREMO_ID = process.env.SUPREMO_ID || '';
     this.SUPREMO_GROUP_ID = process.env.SUPREMO_GROUP_ID || '';
+    this.GRANDE_G_ID = process.env.GRANDE_G_ID || '';
+    this.GRANDE_G_GROUP_ID = process.env.GRANDE_G_GROUP_ID || '';
     this.TURN_DURATION = PAREDAO_DEFAULTS.turnDurationMinutes;
     this.UPDATE_INTERVAL = PAREDAO_DEFAULTS.updateIntervalMinutes;
   }
@@ -97,6 +99,25 @@ class GameManager {
         name: name,
         order: nextOrder
       };
+    }
+
+    const isGrandeG = (groupUserId === this.GRANDE_G_GROUP_ID) ||
+      (groupUserId === this.GRANDE_G_ID) ||
+      (groupUserId.endsWith('@lid') &&
+        groupUserId.replace('@lid', '@c.us') === this.GRANDE_G_ID);
+
+    if (isGrandeG) {
+      const dmUserId = this.GRANDE_G_ID;
+      const groupId = this.GRANDE_G_GROUP_ID || groupUserId;
+      const name = '🦍 Grande G';
+
+      await db.registerPlayerWithManualInfo(groupId, dmUserId, name, false);
+      await db.query('UPDATE players SET is_admin = true, is_grande_g = true WHERE id = $1', [groupId]);
+
+      const players = await db.getGamePlayers(gameId);
+      const nextOrder = players.length + 1;
+      await db.addPlayerToGame(gameId, groupId, nextOrder);
+      return { playerId: groupId, dmId: dmUserId, name, order: nextOrder };
     }
     
     const cleanNumber = this.validatePhoneNumber(phoneNumber);
@@ -927,6 +948,16 @@ class GameManager {
            player.dm_id === this.SUPREMO_ID ||
            (player.id.endsWith('@lid') && 
             player.id.replace('@lid', '@c.us') === this.SUPREMO_ID);
+  }
+
+  async isGrandeG(playerId) {
+    const player = await db.findPlayerByAnyId(playerId);
+    if (!player) return false;
+
+    return player.id === this.GRANDE_G_GROUP_ID ||
+      player.dm_id === this.GRANDE_G_ID ||
+      (player.id.endsWith('@lid') &&
+        player.id.replace('@lid', '@c.us') === this.GRANDE_G_ID);
   }
 
   async getPlayerOrder(gameId, playerId) {
